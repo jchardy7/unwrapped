@@ -1,0 +1,2 @@
+# example of a test module that will be used to test the edge cases for the functions we write in io.py
+# this structure will be followed, where we will create a module (clean.py for example), then create a test module in this folder (test_clean.py for example)
