@@ -1,1 +1,5 @@
-# this file will be used to hide non-essential modules/functions to the non-developer end user
+"""Public package interface for the unwrapped project."""
+
+from .validation import run_validation
+
+__all__ = ["run_validation"]
