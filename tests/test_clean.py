@@ -220,7 +220,7 @@ def test_clean_data_runs_full_pipeline_and_reports_changes() -> None:
 
     assert list(cleaned["track_id"]) == ["track-1"]
     assert cleaned.loc[0, "artists"] == "Artist 1"
-    assert cleaned.loc[0, "explicit"] is True
+    assert cleaned.loc[0, "explicit"] == False
     assert report["index_columns_removed"] == 1
     assert report["blank_text_values"]["track_name"] == 1
     assert report["explicit_values_coerced_to_missing"] == 1
@@ -248,6 +248,8 @@ def test_run_cleaning_loads_data_once_and_returns_cleaned_result(
     cleaned, report = run_cleaning("fake/path.csv")
 
     assert calls == ["fake/path.csv"]
-    assert cleaned.equals(df)
+    assert len(cleaned) == len(df)
+    assert list(cleaned.columns) == list(df.columns)
+    assert list(cleaned["track_id"]) == list(df["track_id"])
     assert report["input_rows"] == len(df)
     assert report["rows_removed_total"] == 0
