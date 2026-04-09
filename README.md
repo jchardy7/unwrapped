@@ -87,3 +87,67 @@ The validation workflow runs in a fixed sequence:
 
 The validation entrypoint returns both the loaded DataFrame and the summary
 report.
+
+## Preference Scoring Tool
+
+The preference tool lets you build a personalized "taste profile" from a list of songs you like, then scores every track in the dataset by how closely it matches that profile.
+
+**How it works:** It computes the mean audio feature vector across all your liked songs (your taste profile), then ranks every other song in the dataset by cosine similarity to that profile. Scores are normalized to a 0–1 range, where 1 is the closest match to your taste.
+
+### Usage
+
+```python
+from unwrapped.io import load_tracks
+from unwrapped.preference import LikedSongs
+
+df = load_tracks("path/to/spotify_data.csv")
+
+# Create a LikedSongs object
+liked = LikedSongs(df)
+
+# Add songs by Spotify track ID or by name
+liked.add_by_id("5SuOikwiRyPMVoIQDJUgSV")
+liked.add_by_name("Blinding Lights")
+liked.add_by_name("Levitating", artist="Dua Lipa")  # use artist to disambiguate
+
+# See what's in your liked list
+liked.show()
+
+# Predict preference scores for all songs
+scores = liked.predict(top_n=20)
+print(scores)
+```
+
+### Output
+
+`predict()` returns a DataFrame sorted by `preference_score` descending:
+
+| track_id | track_name | artists | track_genre | popularity | preference_score |
+|---|---|---|---|---|---|
+| 3n3Ppam7vgaVa1iaRUIOKE | Flowers | Miley Cyrus | pop | 87 | 0.9741 |
+| ... | ... | ... | ... | ... | ... |
+
+### Saving and loading your liked list
+
+Your liked songs list can be saved to a file and reloaded in a future session, so you don't have to rebuild it every time:
+
+```python
+# Save
+liked.save("my_likes.json")
+
+# Load in a future session
+liked = LikedSongs(df)
+liked.load("my_likes.json")
+```
+
+### Parameters
+
+**`LikedSongs(df)`**
+- `df` — a DataFrame loaded via `unwrapped.io.load_tracks()`
+
+**`add_by_name(track_name, artist=None)`**
+- `artist` is optional but recommended when multiple songs share the same title
+
+**`predict(top_n=None, exclude_liked=True)`**
+- `top_n` — return only the N highest-scoring songs (default: all songs)
+- `exclude_liked` — if `True`, your liked songs are excluded from results (default: `True`)
