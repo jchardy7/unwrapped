@@ -24,6 +24,7 @@ from unwrapped.summary import (
     describe_shape,
     detect_outliers,
     genre_summary,
+    popularity_by_genre_pivot,
     run_summary,
     summarize_data,
     target_correlations,
@@ -299,6 +300,47 @@ class TestGenreSummary:
         assert result.empty
 
 
+class TestPopularityByGenrePivot:
+    def test_returns_pivot_with_genres_as_rows(self) -> None:
+        df = make_test_df()
+        result = popularity_by_genre_pivot(df)
+
+        assert isinstance(result, pd.DataFrame)
+        assert "pop" in result.index
+        assert "rock" in result.index
+        assert "jazz" in result.index
+
+    def test_default_bins_produce_four_tiers(self) -> None:
+        df = make_test_df()
+        result = popularity_by_genre_pivot(df)
+
+        assert list(result.columns) == ["Low", "Medium", "High", "Very High"]
+
+    def test_counts_match_data(self) -> None:
+        df = make_test_df()
+        # popularity values: pop=40,85  rock=70  jazz=20
+        result = popularity_by_genre_pivot(df)
+
+        assert result.loc["jazz", "Low"] == 1
+        assert result.loc["pop", "Medium"] == 1
+        assert result.loc["pop", "Very High"] == 1
+        assert result.loc["rock", "High"] == 1
+
+    def test_custom_bins_and_labels(self) -> None:
+        df = make_test_df()
+        result = popularity_by_genre_pivot(
+            df, bins=[0, 50, 100], labels=["Unpopular", "Popular"]
+        )
+
+        assert list(result.columns) == ["Unpopular", "Popular"]
+
+    def test_returns_empty_when_columns_missing(self) -> None:
+        df = make_test_df().drop(columns=["track_genre"])
+        result = popularity_by_genre_pivot(df)
+
+        assert result.empty
+
+
 class TestSummarizeData:
     def test_returns_all_report_sections(self) -> None:
         df = make_test_df()
@@ -313,6 +355,7 @@ class TestSummarizeData:
             "correlation_matrix",
             "target_correlations",
             "genre_summary",
+            "popularity_by_genre",
         ]
         for key in expected_keys:
             assert key in report, f"Missing report section: {key}"

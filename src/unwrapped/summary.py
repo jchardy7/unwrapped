@@ -275,6 +275,52 @@ def genre_summary(df: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
+def popularity_by_genre_pivot(
+    df: pd.DataFrame,
+    bins: list[int] | None = None,
+    labels: list[str] | None = None,
+) -> pd.DataFrame:
+    """Pivot table of track counts by genre and popularity tier.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Spotify dataset containing ``track_genre`` and ``popularity``.
+    bins : list[int] | None
+        Bin edges for popularity. Defaults to ``[0, 25, 50, 75, 100]``.
+    labels : list[str] | None
+        Labels for the bins. Defaults to ``["Low", "Medium", "High", "Very High"]``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Pivot table with genres as rows, popularity tiers as columns, and
+        track counts as values.
+    """
+
+    if "track_genre" not in df.columns or "popularity" not in df.columns:
+        return pd.DataFrame()
+
+    if bins is None:
+        bins = [0, 25, 50, 75, 100]
+    if labels is None:
+        labels = ["Low", "Medium", "High", "Very High"]
+
+    tmp = df[["track_genre", "popularity"]].copy()
+    tmp["popularity"] = pd.to_numeric(tmp["popularity"], errors="coerce")
+    tmp = tmp.dropna(subset=["popularity"])
+    tmp["popularity_tier"] = pd.cut(tmp["popularity"], bins=bins, labels=labels, include_lowest=True)
+
+    return pd.pivot_table(
+        tmp,
+        index="track_genre",
+        columns="popularity_tier",
+        aggfunc="size",
+        fill_value=0,
+        observed=False,
+    )
+
+
 def summarize_data(df: pd.DataFrame) -> dict[str, object]:
     """Run the full descriptive summary and return a combined report.
 
@@ -293,6 +339,7 @@ def summarize_data(df: pd.DataFrame) -> dict[str, object]:
 
     corr = correlation_matrix(df)
     genre = genre_summary(df)
+    pivot = popularity_by_genre_pivot(df)
 
     return {
         "shape": describe_shape(df),
@@ -303,6 +350,7 @@ def summarize_data(df: pd.DataFrame) -> dict[str, object]:
         "correlation_matrix": corr.to_dict(),
         "target_correlations": target_correlations(df),
         "genre_summary": genre.to_dict(),
+        "popularity_by_genre": pivot.to_dict(),
     }
 
 
