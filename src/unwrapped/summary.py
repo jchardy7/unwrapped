@@ -354,6 +354,78 @@ def summarize_data(df: pd.DataFrame) -> dict[str, object]:
     }
 
 
+def export_summary_csvs(df: pd.DataFrame, output_dir: str = "outputs") -> dict[str, str]:
+    """Export key summary results as CSV files for the visualization module.
+
+    Writes four CSV files that the visualization team can load directly
+    for plotting:
+
+    - ``summary_target_correlations.csv`` — each audio feature's Pearson
+      correlation with popularity, sorted by absolute strength.
+    - ``summary_genre_means.csv`` — mean audio features per genre with
+      track counts, derived from the genre aggregation.
+    - ``summary_popularity_by_genre.csv`` — pivot table of track counts
+      across popularity tiers (Low / Medium / High / Very High) per genre.
+    - ``summary_outliers.csv`` — per-column outlier counts, percentages,
+      and IQR bounds.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Spotify dataset to summarize and export.
+    output_dir : str, default "outputs"
+        Directory to write CSV files into. Created if it does not exist.
+
+    Returns
+    -------
+    dict[str, str]
+        Mapping of description to file path for each exported CSV.
+    """
+
+    from pathlib import Path
+
+    out = Path(output_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    exported: dict[str, str] = {}
+
+    # Target correlations
+    corrs = target_correlations(df)
+    if corrs:
+        corr_df = pd.DataFrame(
+            list(corrs.items()), columns=["feature", "correlation"]
+        )
+        path = str(out / "summary_target_correlations.csv")
+        corr_df.to_csv(path, index=False)
+        exported["target_correlations"] = path
+
+    # Genre means with counts
+    genre = genre_summary(df)
+    if not genre.empty:
+        # Flatten the MultiIndex columns into "feature_stat" format
+        genre.columns = [f"{feat}_{stat}" for feat, stat in genre.columns]
+        path = str(out / "summary_genre_means.csv")
+        genre.to_csv(path)
+        exported["genre_means"] = path
+
+    # Popularity by genre pivot
+    pivot = popularity_by_genre_pivot(df)
+    if not pivot.empty:
+        path = str(out / "summary_popularity_by_genre.csv")
+        pivot.to_csv(path)
+        exported["popularity_by_genre"] = path
+
+    # Outlier summary
+    outliers = detect_outliers(df)
+    if outliers:
+        outlier_df = pd.DataFrame(outliers).T
+        outlier_df.index.name = "column"
+        path = str(out / "summary_outliers.csv")
+        outlier_df.to_csv(path)
+        exported["outliers"] = path
+
+    return exported
+
+
 def run_summary(path: str) -> tuple[pd.DataFrame, dict[str, object]]:
     """Load the dataset from disk and return the descriptive summary.
 

@@ -23,6 +23,7 @@ from unwrapped.summary import (
     describe_numeric,
     describe_shape,
     detect_outliers,
+    export_summary_csvs,
     genre_summary,
     popularity_by_genre_pivot,
     run_summary,
@@ -359,6 +360,46 @@ class TestSummarizeData:
         ]
         for key in expected_keys:
             assert key in report, f"Missing report section: {key}"
+
+
+class TestExportSummaryCsvs:
+    def test_creates_output_files(self, tmp_path: Path) -> None:
+        df = make_test_df()
+        exported = export_summary_csvs(df, output_dir=str(tmp_path))
+
+        assert "target_correlations" in exported
+        assert "genre_means" in exported
+        assert "popularity_by_genre" in exported
+        assert "outliers" in exported
+
+        for path in exported.values():
+            assert Path(path).exists()
+
+    def test_target_correlations_csv_has_expected_columns(self, tmp_path: Path) -> None:
+        df = make_test_df()
+        exported = export_summary_csvs(df, output_dir=str(tmp_path))
+
+        corr_df = pd.read_csv(exported["target_correlations"])
+        assert list(corr_df.columns) == ["feature", "correlation"]
+        assert len(corr_df) > 0
+
+    def test_genre_means_csv_has_genre_index(self, tmp_path: Path) -> None:
+        df = make_test_df()
+        exported = export_summary_csvs(df, output_dir=str(tmp_path))
+
+        genre_df = pd.read_csv(exported["genre_means"], index_col=0)
+        assert "pop" in genre_df.index
+        assert "rock" in genre_df.index
+
+    def test_outliers_csv_has_expected_structure(self, tmp_path: Path) -> None:
+        df = make_test_df()
+        exported = export_summary_csvs(df, output_dir=str(tmp_path))
+
+        outlier_df = pd.read_csv(exported["outliers"], index_col=0)
+        assert "count" in outlier_df.columns
+        assert "percentage" in outlier_df.columns
+        assert "lower_bound" in outlier_df.columns
+        assert "upper_bound" in outlier_df.columns
 
 
 class TestRunSummary:
