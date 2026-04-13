@@ -43,6 +43,15 @@ python scripts/demo_validation.py
 This demo loads `data/raw/spotify_data.csv`, validates the dataset, and prints
 the resulting summary report.
 
+To run the data summary demo:
+
+```bash
+python scripts/demo_summary.py
+```
+
+This demo loads the dataset, runs the full descriptive summary, and prints
+statistics, outlier counts, feature correlations, and genre breakdowns.
+
 ## How Cleaning Works
 
 The cleaning workflow runs in a fixed sequence:
@@ -87,6 +96,41 @@ The validation workflow runs in a fixed sequence:
 
 The validation entrypoint returns both the loaded DataFrame and the summary
 report.
+
+## How Summary Works
+
+The summary module produces a comprehensive descriptive overview of the
+dataset. It is designed to run on either raw or cleaned data and does not
+modify the DataFrame. The entrypoint is `summarize_data(df)`, which calls
+every helper and returns a combined report dictionary.
+
+1. **Shape and types.** Row and column counts, column names, and a breakdown
+   of how many columns use each dtype.
+2. **Numeric statistics.** For each numeric column (popularity, danceability,
+   energy, tempo, duration, etc.): count, mean, standard deviation, min,
+   quartiles (Q1, median, Q3), max, skewness, and kurtosis.
+3. **Categorical statistics.** For `track_genre`, `artists`, and `explicit`:
+   number of unique values and the top-10 most frequent values with counts.
+4. **Missing values.** Per-column missing count and percentage.
+5. **Outlier detection.** Flags values beyond 1.5x the interquartile range
+   for each numeric column and reports the count, percentage, and IQR bounds.
+6. **Correlation matrix.** Pairwise Pearson correlations across all audio
+   feature columns.
+7. **Target correlations.** Each audio feature's correlation with
+   `popularity`, sorted by absolute strength. This shows which features have
+   the most predictive signal before modeling.
+8. **Genre aggregation.** Mean, standard deviation, and count of each audio
+   feature grouped by `track_genre`.
+9. **Popularity pivot table.** A pivot table crossing genre against popularity
+   tiers (Low 0-25, Medium 25-50, High 50-75, Very High 75-100) with track
+   counts in each cell.
+10. **CSV export.** `export_summary_csvs(df)` writes four CSV files to an
+    `outputs/` directory (target correlations, genre means, popularity pivot,
+    and outlier summary) so the visualization module can load them directly.
+
+The summary entrypoint returns a dictionary containing all of the above. A
+convenience wrapper `run_summary(path)` loads the CSV and returns both the
+DataFrame and the report.
 
 ## Preference Scoring Tool
 
