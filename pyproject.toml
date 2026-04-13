@@ -11,6 +11,7 @@ requires-python = ">=3.13"
 dependencies = [ # change with what libraries the end user will need
   "numpy>=2.0",
   "pandas>=2.2",
+  "matplotlib>=3.8",
 ]
 
 [project.optional-dependencies]
