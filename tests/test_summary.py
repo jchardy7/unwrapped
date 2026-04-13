@@ -6,15 +6,12 @@ verified independently and failures point back to a single behavior.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import pytest
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from unwrapped.summary import (
     correlation_matrix,

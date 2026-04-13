@@ -2,7 +2,8 @@
 
 from pprint import pprint
 
-from unwrapped.io import DEFAULT_DATA_PATH, run_validation
+from unwrapped.io import DEFAULT_DATA_PATH
+from unwrapped.validation import run_validation
 
 
 def main() -> None:

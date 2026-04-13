@@ -8,10 +8,11 @@ version = "0.1.0"
 description = "Python package using Spotify data for STAT 3250 final project"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = [ # change with what libraries the end user will need
+dependencies = [
   "numpy>=2.0",
   "pandas>=2.2",
   "matplotlib>=3.8",
+  "scikit-learn>=1.4",
 ]
 
 [project.optional-dependencies]

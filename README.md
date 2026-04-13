@@ -2,15 +2,12 @@
 
 **About**: Final project for STAT 3250 at the University of Virginia
 
-## How To Use This File
-This is not code, it is a [Markdown](https://www.markdownguide.org/basic-syntax/) file that uses plain english to explain the project, what it does, who created it, and how a user or developer can interact with it
-
 ## Project Goals
 
 This package helps our STAT 3250 team explore a Spotify tracks dataset in a
-reproducible way. Right now the project includes a loading layer, a cleaning
-workflow, and a validation workflow so the dataset can be prepared for later
-analysis and modeling.
+reproducible way. The project includes a loading layer, cleaning workflow,
+validation workflow, descriptive summary module, popularity modeling pipeline,
+preference scoring tool, and visualization helpers.
 
 ## Setup
 
@@ -20,8 +17,8 @@ Install the package and development tools with:
 pip install -e ".[dev]"
 ```
 
-This installs the core package dependencies listed in
-`pyproject.toml`, including pandas and numpy, plus pytest for testing.
+This installs the core package dependencies listed in `pyproject.toml`,
+including pandas, numpy, matplotlib, and scikit-learn, plus pytest for testing.
 
 ## Run The Demos
 
@@ -42,6 +39,25 @@ python scripts/demo_validation.py
 
 This demo loads `data/raw/spotify_data.csv`, validates the dataset, and prints
 the resulting summary report.
+
+To run the descriptive summary demo:
+
+```bash
+python scripts/demo_summary.py
+```
+
+This demo loads the dataset, computes descriptive statistics, and prints key
+findings including numeric summaries, categorical breakdowns, missing values,
+outliers, and feature correlations with popularity.
+
+## Running Tests
+
+```bash
+pytest
+```
+
+All tests live in the `tests/` directory and cover the IO, cleaning,
+validation, summary, popularity, and preference modules.
 
 ## How Cleaning Works
 
@@ -88,19 +104,54 @@ The validation workflow runs in a fixed sequence:
 The validation entrypoint returns both the loaded DataFrame and the summary
 report.
 
-## Preference Scoring Tool
+## Popularity Modeling Pipeline
 
-The preference tool lets you build a personalized "taste profile" from a list of songs you like, then scores every track in the dataset by how closely it matches that profile.
-
-**How it works:** It computes the mean audio feature vector across all your liked songs (your taste profile), then ranks every other song in the dataset by cosine similarity to that profile. Scores are normalized to a 0–1 range, where 1 is the closest match to your taste.
+The popularity module trains regression models to predict track popularity from
+audio features and genre metadata.
 
 ### Usage
 
 ```python
-from unwrapped.io import load_tracks
+from unwrapped.popularity import run_popularity_pipeline
+
+results = run_popularity_pipeline("data/raw/spotify_data.csv")
+print(results["comparison"])
+print(results["feature_importance"])
+```
+
+### How it works
+
+1. The dataset is loaded and validated for required columns.
+2. Missing values are handled: rows without popularity are dropped, missing
+   genres are filled with `"unknown"`, and missing numeric features are filled
+   with the column median.
+3. Identifier columns are removed and genre is one-hot encoded.
+4. A baseline linear regression and a random forest regressor are trained on an
+   80/20 train/test split.
+5. Both models are evaluated with RMSE, MAE, and R², plus 5-fold
+   cross-validation.
+6. Feature importances from the random forest are reported.
+7. Results (model comparison, feature importances, and test predictions) are
+   optionally saved as CSV files to the `outputs/` directory.
+
+## Preference Scoring Tool
+
+The preference tool lets you build a personalized "taste profile" from a list
+of songs you like, then scores every track in the dataset by how closely it
+matches that profile.
+
+**How it works:** It computes the mean audio feature vector across all your
+liked songs (your taste profile), then ranks every other song in the dataset by
+cosine similarity to that profile. Scores are normalized to a 0-1 range, where
+1 is the closest match to your taste.
+
+### Usage
+
+```python
+from unwrapped.io import load_data
 from unwrapped.preference import LikedSongs
 
-df = load_tracks("path/to/spotify_data.csv")
+df = load_data("data/raw/spotify_data.csv")
 
 # Create a LikedSongs object
 liked = LikedSongs(df)
@@ -129,7 +180,8 @@ print(scores)
 
 ### Saving and loading your liked list
 
-Your liked songs list can be saved to a file and reloaded in a future session, so you don't have to rebuild it every time:
+Your liked songs list can be saved to a file and reloaded in a future session,
+so you don't have to rebuild it every time:
 
 ```python
 # Save
@@ -143,7 +195,7 @@ liked.load("my_likes.json")
 ### Parameters
 
 **`LikedSongs(df)`**
-- `df` — a DataFrame loaded via `unwrapped.io.load_tracks()`
+- `df` — a DataFrame loaded via `unwrapped.io.load_data()`
 
 **`add_by_name(track_name, artist=None)`**
 - `artist` is optional but recommended when multiple songs share the same title
@@ -156,7 +208,9 @@ liked.load("my_likes.json")
 
 To run the visualization workflow:
 
-    python scripts/demo_visualization.py
+```bash
+python scripts/demo_visualization.py
+```
 
 This will generate:
 - outputs/top_genres.png

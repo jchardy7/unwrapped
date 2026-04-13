@@ -6,16 +6,10 @@ verified independently and failures point back to a single behavior.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import pytest
-
-# Add the local src/ directory so the package can be imported without requiring
-# an editable install before running the tests in a fresh checkout.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from unwrapped.clean import clean_data
 from unwrapped.clean import coerce_numeric_columns
