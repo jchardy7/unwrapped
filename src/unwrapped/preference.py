@@ -10,10 +10,10 @@ Workflow:
     3. Call predict() to score all songs in your dataset
 
 Example:
-    from unwrapped.io import load_tracks
+    from unwrapped.io import load_data
     from unwrapped.preference import LikedSongs
 
-    df = load_tracks("spotify_data.csv")
+    df = load_data("spotify_data.csv")
 
     liked = LikedSongs(df)
     liked.add_by_id("5SuOikwiRyPMVoIQDJUgSV")
@@ -24,7 +24,7 @@ Example:
 """
 
 import json
-import numpy as np
+
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
@@ -57,7 +57,7 @@ class LikedSongs:
     Parameters
     ----------
     df : pd.DataFrame
-        Full Spotify tracks DataFrame, as returned by unwrapped.io.load_tracks().
+        Full Spotify tracks DataFrame, as returned by unwrapped.io.load_data().
         Must contain the columns in AUDIO_FEATURES plus 'track_id' and 'track_name'.
 
     Attributes
@@ -329,5 +329,5 @@ class LikedSongs:
         if missing:
             raise ValueError(
                 f"DataFrame is missing required columns: {sorted(missing)}. "
-                "Make sure you loaded the data using unwrapped.io.load_tracks()."
+                "Make sure you loaded the data using unwrapped.io.load_data()."
             )

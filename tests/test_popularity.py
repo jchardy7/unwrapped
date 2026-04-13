@@ -1,14 +1,9 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
-sys.path.append(str(Path(__file__).resolve().parents[1] / "src"))
-
-from unwrapped.popularity import (    
+from unwrapped.popularity import (
     validate_data,
     handle_missing_values,
     preprocess_data,
@@ -17,7 +12,7 @@ from unwrapped.popularity import (
     train_random_forest,
     evaluate_model,
     compare_models,
-    show_feature_importance,
+    get_feature_importance,
 )
 
 
@@ -182,6 +177,7 @@ def test_train_linear_model_and_evaluate(sample_df):
 
     assert results["model"] == "Linear Regression"
     assert isinstance(results["rmse"], float)
+    assert isinstance(results["mae"], float)
     assert isinstance(results["r2"], float)
 
 
@@ -195,54 +191,61 @@ def test_train_random_forest_and_evaluate(sample_df):
 
     assert results["model"] == "Random Forest"
     assert isinstance(results["rmse"], float)
+    assert isinstance(results["mae"], float)
     assert isinstance(results["r2"], float)
 
 
-# Model comparison should return a tidy summary dataframe.
+# Model comparison should return a tidy summary dataframe sorted by RMSE.
 def test_compare_models_returns_dataframe():
     results = [
-        {"model": "Linear Regression", "rmse": 19.12, "r2": 0.2589},
-        {"model": "Random Forest", "rmse": 15.29, "r2": 0.5264},
+        {"model": "Linear Regression", "rmse": 19.12, "mae": 15.0, "r2": 0.2589},
+        {"model": "Random Forest", "rmse": 15.29, "mae": 12.0, "r2": 0.5264},
     ]
 
     comparison = compare_models(results)
 
-    assert list(comparison.columns) == ["model", "rmse", "r2"]
+    assert "model" in comparison.columns
+    assert "rmse" in comparison.columns
+    assert "mae" in comparison.columns
+    assert "r2" in comparison.columns
     assert len(comparison) == 2
+    # Should be sorted by rmse ascending
+    assert comparison.iloc[0]["rmse"] <= comparison.iloc[1]["rmse"]
 
 
-# Model comparison should round metrics as intended.
+# Model comparison should round all numeric metrics to 4 decimal places.
 def test_compare_models_rounds_metrics():
     results = [
-        {"model": "Linear Regression", "rmse": 19.12345, "r2": 0.25891},
-        {"model": "Random Forest", "rmse": 15.28789, "r2": 0.52644},
+        {"model": "Linear Regression", "rmse": 19.123456, "mae": 15.12345, "r2": 0.258912},
     ]
 
     comparison = compare_models(results)
 
-    assert comparison.loc[0, "rmse"] == 19.12
+    assert comparison.loc[0, "rmse"] == 19.1235
+    assert comparison.loc[0, "mae"] == 15.1234
     assert comparison.loc[0, "r2"] == 0.2589
 
 
-# Feature importance should return a Series of the requested length.
-def test_show_feature_importance_returns_series(sample_df):
+# Feature importance should return a DataFrame of the requested length.
+def test_get_feature_importance_returns_dataframe(sample_df):
     processed = preprocess_data(sample_df)
     X_train, X_test, y_train, y_test = split_data(processed)
 
     model = train_random_forest(X_train, y_train)
-    importances = show_feature_importance(model, X_train, top_n=5)
+    importances = get_feature_importance(model, X_train, top_n=5)
 
-    assert isinstance(importances, pd.Series)
+    assert isinstance(importances, pd.DataFrame)
     assert len(importances) == 5
-    assert importances.index.is_unique
+    assert "feature" in importances.columns
+    assert "importance" in importances.columns
 
 
 # Feature importances should be sorted from highest to lowest.
-def test_show_feature_importance_sorted_desc(sample_df):
+def test_get_feature_importance_sorted_desc(sample_df):
     processed = preprocess_data(sample_df)
     X_train, X_test, y_train, y_test = split_data(processed)
 
     model = train_random_forest(X_train, y_train)
-    importances = show_feature_importance(model, X_train, top_n=5)
+    importances = get_feature_importance(model, X_train, top_n=5)
 
-    assert importances.is_monotonic_decreasing
+    assert importances["importance"].is_monotonic_decreasing

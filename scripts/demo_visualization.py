@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from unwrapped.io import load_tracks
+from unwrapped.io import load_data
 from unwrapped.visualization import (
     plot_popularity_distribution,
     plot_top_genres,
@@ -12,7 +12,7 @@ def main() -> None:
     data_path = "data/raw/spotify_data.csv"
     output_dir = Path("outputs")
 
-    df = load_tracks(data_path)
+    df = load_data(data_path)
 
     fig1, _ = plot_top_genres(df, top_n=10)
     save_figure(fig1, output_dir / "top_genres.png")

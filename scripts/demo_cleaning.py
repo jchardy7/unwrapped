@@ -2,7 +2,8 @@
 
 from pprint import pprint
 
-from unwrapped.io import DEFAULT_DATA_PATH, run_cleaning
+from unwrapped.io import DEFAULT_DATA_PATH
+from unwrapped.clean import run_cleaning
 
 
 def main() -> None:
