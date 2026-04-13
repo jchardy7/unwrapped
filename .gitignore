@@ -1,6 +1,38 @@
+# Python bytecode
 __pycache__/
+*.py[cod]
+*$py.class
+*.pyo
 *.pyc
-*.egg-info/
+
+
+# Distribution / packaging
 dist/
 build/
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+build/
 outputs/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE settings
+.vscode/
+.idea/
