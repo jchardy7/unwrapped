@@ -1,54 +1,58 @@
-# unwrapped Python Package
+# unwrapped
 
-**About**: Final project for STAT 3250 at the University of Virginia
+**STAT 3250 Final Project — University of Virginia**
 
-## Project Goals
+A Python package for exploring and analyzing a Spotify tracks dataset. We built
+tools to clean raw Spotify data, run statistical analysis on audio features,
+model track popularity, and recommend songs based on listening preferences.
 
-This package helps our STAT 3250 team explore a Spotify tracks dataset in a
-reproducible way. The project includes a loading layer, cleaning workflow,
-validation workflow, descriptive summary module, popularity modeling pipeline,
-preference scoring tool, and visualization helpers.
+## Research Questions
+
+1. **Which audio features are most associated with track popularity?**
+   We computed Pearson correlations between each audio feature and popularity,
+   then used bucket analysis to check for non-linear patterns.
+
+2. **How do genres differ in their audio profiles?**
+   We compared the top genres by their average audio features to see what makes
+   each genre sonically distinct.
+
+3. **Which tracks are unusual for their genre?**
+   By merging genre-level statistics back onto each track and computing
+   z-scores, we identified tracks whose audio features don't match their
+   genre's typical profile.
 
 ## Setup
 
-Install the package and development tools with:
+Clone the repo and install in editable mode:
 
 ```bash
+git clone https://github.com/jchardy7/unwrapped.git
+cd unwrapped
 pip install -e ".[dev]"
 ```
 
-This installs the core package dependencies listed in `pyproject.toml`,
-including pandas, numpy, matplotlib, and scikit-learn, plus pytest for testing.
+This installs all dependencies (pandas, numpy, matplotlib, scikit-learn) and
+pytest for running the test suite.
 
-## Run The Demos
+## Running the Analysis
 
-To run the cleaning workflow demo on the Spotify dataset:
-
-```bash
-python scripts/demo_cleaning.py
-```
-
-This demo loads `data/raw/spotify_data.csv`, applies the cleaning pipeline,
-prints the cleaning summary report, and shows a preview of the cleaned data.
-
-To run the validation workflow demo on the Spotify dataset:
+To run the main analysis that answers our research questions:
 
 ```bash
-python scripts/demo_validation.py
+python scripts/demo_analysis.py
 ```
 
-This demo loads `data/raw/spotify_data.csv`, validates the dataset, and prints
-the resulting summary report.
+This cleans the raw dataset, runs the full analysis pipeline, and prints
+findings for each research question with key takeaways.
 
-To run the descriptive summary demo:
+### Other Demos
 
 ```bash
-python scripts/demo_summary.py
+python scripts/demo_cleaning.py       # See what the cleaning pipeline does
+python scripts/demo_validation.py     # Run data quality checks
+python scripts/demo_summary.py        # Print descriptive statistics
+python scripts/demo_visualization.py  # Generate charts (saved to outputs/)
 ```
-
-This demo loads the dataset, computes descriptive statistics, and prints key
-findings including numeric summaries, categorical breakdowns, missing values,
-outliers, and feature correlations with popularity.
 
 ## Running Tests
 
@@ -56,96 +60,110 @@ outliers, and feature correlations with popularity.
 pytest
 ```
 
-All tests live in the `tests/` directory and cover the IO, cleaning,
-validation, summary, popularity, and preference modules.
+Tests are in the `tests/` directory. They use small hand-built DataFrames so
+they run fast and don't need the real CSV file.
 
-## How Cleaning Works
+## Project Structure
 
-The cleaning workflow runs in a fixed sequence:
-
-1. The dataset is loaded from CSV into a pandas DataFrame.
-2. If the file contains the extra `Unnamed: 0` column, it is removed.
-3. Text columns are stripped of extra whitespace, and blank strings are turned
-   into missing values.
-4. The `explicit` column is normalized into boolean values.
-5. Numeric analysis columns are coerced to numeric types with invalid strings
-   converted to missing values.
-6. Rows missing required identifiers such as `track_id`, `artists`,
-   `track_name`, and `track_genre` are dropped.
-7. Rows with invalid core numeric values, such as non-positive `tempo` or
-   `duration_ms`, or out-of-range audio features, are removed.
-8. Exact duplicate rows are dropped, and repeated `track_id` values are reduced
-   to one canonical row using completeness and popularity as tie-breakers.
-
-The cleaning entrypoint returns both the cleaned DataFrame and a report that
-summarizes what changed at each stage.
-
-## How Validation Works
-
-The validation workflow runs in a fixed sequence:
-
-1. The dataset is loaded from CSV into a pandas DataFrame.
-2. If the file contains the extra `Unnamed: 0` column, it is dropped during
-   loading.
-3. The schema check verifies that all expected Spotify fields are present.
-   Missing required columns raise a `ValueError`, while unexpected extra
-   columns produce a warning.
-4. Range checks validate selected numeric fields. `danceability`, `energy`,
-   `valence`, `acousticness`, `instrumentalness`, and `speechiness` must fall
-   between `0` and `1`. `tempo` and `duration_ms` must be positive. Any
-   failure raises a `ValueError`.
-5. A correlation check compares `energy` and `loudness`. If their correlation
-   is below `0.5`, the workflow prints a warning instead of failing.
-6. After validation passes, the report summarizes row and column counts,
-   missing values by column, duplicate rows, duplicate `track_id` values, the
-   number of unique tracks, and track IDs whose core audio features are
-   inconsistent across repeated rows.
-
-The validation entrypoint returns both the loaded DataFrame and the summary
-report.
-
-## Popularity Modeling Pipeline
-
-The popularity module trains regression models to predict track popularity from
-audio features and genre metadata.
-
-### Usage
-
-```python
-from unwrapped.popularity import run_popularity_pipeline
-
-results = run_popularity_pipeline("data/raw/spotify_data.csv")
-print(results["comparison"])
-print(results["feature_importance"])
+```
+unwrapped/
+├── data/raw/               # Raw Spotify dataset
+├── scripts/                # Demo scripts for each workflow
+│   ├── demo_analysis.py    # Main analysis (research questions)
+│   ├── demo_cleaning.py    # Cleaning pipeline demo
+│   ├── demo_summary.py     # Descriptive statistics demo
+│   ├── demo_validation.py  # Data quality checks demo
+│   └── demo_visualization.py  # Chart generation
+├── src/unwrapped/          # Package source code
+│   ├── io.py               # CSV loading
+│   ├── clean.py            # Data cleaning pipeline
+│   ├── validation.py       # Schema and range validation
+│   ├── summary.py          # Descriptive statistics / EDA
+│   ├── analysis.py         # Research question analysis
+│   ├── popularity.py       # Popularity prediction models
+│   ├── preference.py       # Song recommendation tool
+│   └── visualization.py    # Chart generation
+├── tests/                  # Unit tests for each module
+├── pyproject.toml          # Package config and dependencies
+└── README.md
 ```
 
-### How it works
+## How Each Module Works
 
-1. The dataset is loaded and validated for required columns.
-2. Missing values are handled: rows without popularity are dropped, missing
-   genres are filled with `"unknown"`, and missing numeric features are filled
-   with the column median.
-3. Identifier columns are removed and genre is one-hot encoded.
-4. A baseline linear regression and a random forest regressor are trained on an
-   80/20 train/test split.
-5. Both models are evaluated with RMSE, MAE, and R², plus 5-fold
-   cross-validation.
-6. Feature importances from the random forest are reported.
-7. Results (model comparison, feature importances, and test predictions) are
-   optionally saved as CSV files to the `outputs/` directory.
+### Data Loading (`io.py`)
 
-## Preference Scoring Tool
+Reads the raw CSV into a pandas DataFrame. Automatically removes the
+`Unnamed: 0` index column that some Spotify CSV exports include.
 
-The preference tool lets you build a personalized "taste profile" from a list
-of songs you like, then scores every track in the dataset by how closely it
-matches that profile.
+### Cleaning (`clean.py`)
 
-**How it works:** It computes the mean audio feature vector across all your
-liked songs (your taste profile), then ranks every other song in the dataset by
-cosine similarity to that profile. Scores are normalized to a 0-1 range, where
-1 is the closest match to your taste.
+Applies a fixed sequence of cleaning steps:
 
-### Usage
+1. Remove the export index column
+2. Trim whitespace from text columns, turn blanks into missing values
+3. Normalize the `explicit` column to boolean
+4. Coerce numeric columns to proper types
+5. Drop rows missing key identifiers (track_id, artists, track_name, genre)
+6. Remove rows with invalid values (negative duration, danceability > 1, etc.)
+7. Deduplicate — keep the most complete row per track_id
+
+Returns the cleaned DataFrame and a report showing what changed at each step.
+
+### Validation (`validation.py`)
+
+Checks data quality before analysis:
+
+- Are all 20 expected columns present?
+- Are numeric values within valid ranges?
+- Do energy and loudness correlate as expected?
+- Summary of missing values, duplicates, and inconsistencies
+
+### Summary (`summary.py`)
+
+Computes descriptive statistics across the dataset:
+
+- Numeric column distributions (mean, median, std, skew, kurtosis)
+- Top values for categorical columns (genres, artists)
+- Missing value counts and percentages per column
+- Outlier detection using the 1.5x IQR method
+- Pairwise correlation matrix for audio features
+- Per-feature correlation with popularity
+- Genre-level aggregations and popularity tier pivot tables
+
+Can also export results as CSV files for downstream use.
+
+### Analysis (`analysis.py`)
+
+The core analysis module that answers our research questions. This is where
+the data merging, numpy computation, and statistical analysis come together.
+
+- **Feature-popularity correlations**: Uses `np.corrcoef()` to measure how
+  each audio feature relates to popularity, with strength classification.
+- **Genre comparison**: Compares the top genres side-by-side using numpy
+  array operations to compute per-genre averages.
+- **Genre enrichment**: Computes per-genre mean and std for every audio
+  feature, combines them with `pd.concat()`, and merges them back onto each
+  track using `pd.merge()`. This enables per-track z-score computation.
+- **Genre outlier detection**: Uses the z-scores to find tracks whose audio
+  features are far from their genre's norm.
+- **Feature bucket analysis**: Splits features into equal-width bins using
+  `np.linspace()` to reveal non-linear popularity patterns.
+
+### Popularity Modeling (`popularity.py`)
+
+Trains regression models to predict track popularity from audio features:
+
+1. Validates and preprocesses the data (median imputation, one-hot encoding)
+2. Trains a baseline linear regression and a random forest
+3. Evaluates both with RMSE, MAE, R-squared, and 5-fold cross-validation
+4. Reports feature importances from the random forest
+5. Optionally saves results as CSV files
+
+### Preference Scoring (`preference.py`)
+
+A recommendation tool. You add songs you like, and it builds a "taste
+profile" (mean audio feature vector of your liked songs), then scores every
+other track by cosine similarity to your profile. Scores range from 0 to 1.
 
 ```python
 from unwrapped.io import load_data
@@ -153,65 +171,29 @@ from unwrapped.preference import LikedSongs
 
 df = load_data("data/raw/spotify_data.csv")
 
-# Create a LikedSongs object
 liked = LikedSongs(df)
-
-# Add songs by Spotify track ID or by name
-liked.add_by_id("5SuOikwiRyPMVoIQDJUgSV")
 liked.add_by_name("Blinding Lights")
-liked.add_by_name("Levitating", artist="Dua Lipa")  # use artist to disambiguate
+liked.add_by_name("Levitating", artist="Dua Lipa")
 
-# See what's in your liked list
-liked.show()
-
-# Predict preference scores for all songs
 scores = liked.predict(top_n=20)
 print(scores)
 ```
 
-### Output
-
-`predict()` returns a DataFrame sorted by `preference_score` descending:
-
-| track_id | track_name | artists | track_genre | popularity | preference_score |
-|---|---|---|---|---|---|
-| 3n3Ppam7vgaVa1iaRUIOKE | Flowers | Miley Cyrus | pop | 87 | 0.9741 |
-| ... | ... | ... | ... | ... | ... |
-
-### Saving and loading your liked list
-
-Your liked songs list can be saved to a file and reloaded in a future session,
-so you don't have to rebuild it every time:
+Liked lists can be saved to JSON and reloaded in future sessions:
 
 ```python
-# Save
 liked.save("my_likes.json")
 
-# Load in a future session
+# Later...
 liked = LikedSongs(df)
 liked.load("my_likes.json")
 ```
 
-### Parameters
+### Visualization (`visualization.py`)
 
-**`LikedSongs(df)`**
-- `df` — a DataFrame loaded via `unwrapped.io.load_data()`
+Generates matplotlib charts:
 
-**`add_by_name(track_name, artist=None)`**
-- `artist` is optional but recommended when multiple songs share the same title
+- Horizontal bar chart of top genres by track count
+- Histogram of the popularity distribution
 
-**`predict(top_n=None, exclude_liked=True)`**
-- `top_n` — return only the N highest-scoring songs (default: all songs)
-- `exclude_liked` — if `True`, your liked songs are excluded from results (default: `True`)
-
-## Visualization Demo
-
-To run the visualization workflow:
-
-```bash
-python scripts/demo_visualization.py
-```
-
-This will generate:
-- outputs/top_genres.png
-- outputs/popularity_distribution.png
+Charts are saved as PNG files to the `outputs/` directory.
