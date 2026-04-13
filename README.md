@@ -151,3 +151,13 @@ liked.load("my_likes.json")
 **`predict(top_n=None, exclude_liked=True)`**
 - `top_n` — return only the N highest-scoring songs (default: all songs)
 - `exclude_liked` — if `True`, your liked songs are excluded from results (default: `True`)
+
+## Visualization Demo
+
+To run the visualization workflow:
+
+    python scripts/demo_visualization.py
+
+This will generate:
+- outputs/top_genres.png
+- outputs/popularity_distribution.png
