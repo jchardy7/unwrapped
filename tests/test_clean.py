@@ -120,6 +120,8 @@ def test_coerce_numeric_columns_counts_values_converted_to_missing() -> None:
     """Non-numeric strings should become missing in numeric columns."""
 
     df = make_valid_df()
+    df["tempo"] = df["tempo"].astype(object)
+    df["popularity"] = df["popularity"].astype(object)
     df.loc[0, "tempo"] = "fast"
     df.loc[1, "popularity"] = "very popular"
 
