@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -238,3 +239,226 @@ class TestValidation:
         liked = LikedSongs(dup)
 
         assert liked.df["track_id"].is_unique
+
+
+class TestPredictEuclidean:
+    def test_scores_in_range(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        scores = liked.predict(method="euclidean")
+
+        assert scores["preference_score"].min() >= 0.0
+        assert scores["preference_score"].max() <= 1.0
+
+    def test_sorted_descending(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        scores = liked.predict(method="euclidean")
+
+        assert scores["preference_score"].is_monotonic_decreasing
+
+    def test_inverse_variance_needs_two_liked_songs(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        with pytest.warns(UserWarning, match="at least 2 liked songs"):
+            liked.predict(method="euclidean", weights="inverse_variance")
+
+    def test_inverse_variance_differs_from_uniform(self) -> None:
+        # Construct liked songs that are consistent on danceability but
+        # inconsistent on energy, so inverse-variance weighting should
+        # reweight features asymmetrically relative to uniform.
+        rng = np.random.default_rng(0)
+        rows = []
+        for i in range(15):
+            rows.append(
+                make_row(
+                    track_id=f"tv{i}",
+                    track_name=f"Song {i}",
+                    danceability=float(rng.uniform(0.1, 0.9)),
+                    energy=float(rng.uniform(0.1, 0.9)),
+                    tempo=float(rng.uniform(80, 160)),
+                    loudness=float(rng.uniform(-12, -2)),
+                    valence=float(rng.uniform(0.1, 0.9)),
+                )
+            )
+        df = pd.DataFrame(rows)
+        # Liked songs agree on danceability ≈ 0.5 but disagree on energy.
+        df.loc[0, "danceability"] = 0.50
+        df.loc[1, "danceability"] = 0.51
+        df.loc[2, "danceability"] = 0.49
+        df.loc[0, "energy"] = 0.10
+        df.loc[1, "energy"] = 0.80
+        df.loc[2, "energy"] = 0.30
+
+        liked = LikedSongs(df)
+        liked.add_by_id("tv0")
+        liked.add_by_id("tv1")
+        liked.add_by_id("tv2")
+
+        uniform = liked.predict(method="euclidean", weights="uniform")
+        weighted = liked.predict(method="euclidean", weights="inverse_variance")
+
+        merged = uniform.merge(
+            weighted, on="track_id", suffixes=("_u", "_w")
+        )
+        assert not np.allclose(
+            merged["preference_score_u"], merged["preference_score_w"]
+        )
+
+    def test_unknown_method_raises(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        with pytest.raises(ValueError, match="Unknown method"):
+            liked.predict(method="manhattan")  # type: ignore[arg-type]
+
+    def test_unknown_weights_raises(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+        liked.add_by_id("t2")
+
+        with pytest.raises(ValueError, match="Unknown weights"):
+            liked.predict(
+                method="euclidean",
+                weights="tf-idf",  # type: ignore[arg-type]
+            )
+
+
+class TestPredictExplanations:
+    def test_top_matches_column_added(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        scores = liked.predict(return_explanations=True)
+
+        assert "top_matches" in scores.columns
+        # Each row should list 3 feature names by default.
+        first = scores.iloc[0]["top_matches"]
+        assert len(first.split(", ")) == 3
+
+    def test_explanations_dont_change_base_scores(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        baseline = liked.predict()
+        with_explanations = liked.predict(return_explanations=True)
+
+        pd.testing.assert_series_equal(
+            baseline["preference_score"],
+            with_explanations["preference_score"],
+        )
+
+
+class TestExplain:
+    def test_returns_row_per_feature(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        result = liked.explain("t2")
+
+        assert len(result) == len(AUDIO_FEATURES)
+        assert set(result["feature"]) == set(AUDIO_FEATURES)
+
+    def test_expected_columns_for_cosine(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        result = liked.explain("t2", method="cosine")
+
+        expected = {
+            "feature", "track_raw", "profile_raw",
+            "track_scaled", "profile_scaled",
+            "delta", "abs_delta", "weight",
+        }
+        assert set(result.columns) == expected
+
+    def test_euclidean_includes_attribution(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        result = liked.explain("t2", method="euclidean")
+
+        assert "attribution" in result.columns
+        # All euclidean attributions are non-positive (squared deltas).
+        assert (result["attribution"] <= 0).all()
+
+    def test_sorted_by_abs_delta_ascending(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+        liked.add_by_id("t2")
+
+        result = liked.explain("t3", method="euclidean")
+
+        assert result["abs_delta"].is_monotonic_increasing
+
+    def test_euclidean_attributions_sum_to_raw_score(self) -> None:
+        """sum(attribution) must equal the raw euclidean score exactly."""
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+        liked.add_by_id("t2")
+
+        # Recompute the raw score directly for t3 and compare.
+        explanation = liked.explain("t3", method="euclidean")
+        attribution_sum = explanation["attribution"].sum()
+
+        # The raw score from _raw_scores uses the same formula; compute it
+        # inline so the test doesn't depend on internal caching.
+        scaled_matrix, profile_scaled = liked._scaled_feature_space()
+        weights = liked._compute_weights("uniform")
+        deltas = scaled_matrix - profile_scaled
+        all_raw = -np.sum(weights * deltas ** 2, axis=1)
+        t3_idx = liked.df.index[liked.df["track_id"] == "t3"][0]
+        expected_raw = all_raw[t3_idx]
+
+        assert attribution_sum == pytest.approx(expected_raw, abs=1e-12)
+
+    def test_raises_for_unknown_track(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        with pytest.raises(ValueError, match="not found"):
+            liked.explain("nonexistent")
+
+    def test_raises_when_liked_empty(self) -> None:
+        liked = LikedSongs(make_df())
+
+        with pytest.raises(ValueError, match="empty"):
+            liked.explain("t1")
+
+
+class TestExplainTop:
+    def test_returns_matches_and_mismatches(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        top = liked.explain_top("t2", n=3)
+
+        assert set(top.keys()) == {"matches", "mismatches"}
+        assert len(top["matches"]) == 3
+        assert len(top["mismatches"]) == 3
+
+    def test_matches_have_smaller_abs_delta_than_mismatches(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        top = liked.explain_top("t2", n=2)
+
+        assert top["matches"]["abs_delta"].max() <= top["mismatches"]["abs_delta"].min()
+
+    def test_mismatches_sorted_worst_first(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        top = liked.explain_top("t2", n=3)
+
+        assert top["mismatches"]["abs_delta"].is_monotonic_decreasing
+
+    def test_rejects_non_positive_n(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        with pytest.raises(ValueError, match="n must be"):
+            liked.explain_top("t2", n=0)

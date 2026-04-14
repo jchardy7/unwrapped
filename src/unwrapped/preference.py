@@ -24,13 +24,21 @@ Example:
 """
 
 import json
+import warnings
 from pathlib import Path
+from typing import Literal
 
+import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.preprocessing import MinMaxScaler
 
 from .constants import AUDIO_FEATURES
+
+ScoringMethod = Literal["cosine", "euclidean"]
+WeightingScheme = Literal["uniform", "inverse_variance"]
+
+_VARIANCE_EPS = 1e-9
 
 
 class LikedSongs:
@@ -191,73 +199,324 @@ class LikedSongs:
     # Predicting preference scores
     # ------------------------------------------------------------------
 
-    def predict(self, top_n: int = None, exclude_liked: bool = True) -> pd.DataFrame:
+    def predict(
+        self,
+        top_n: int | None = None,
+        exclude_liked: bool = True,
+        method: ScoringMethod = "cosine",
+        weights: WeightingScheme = "uniform",
+        return_explanations: bool = False,
+    ) -> pd.DataFrame:
         """
         Score every song in the dataset by similarity to the taste profile.
 
-        Uses cosine similarity between each song's feature vector and the
-        mean feature vector of liked songs. Scores are min-max normalized
-        to a 0–1 range.
+        Two scoring methods are supported:
+
+        * ``"cosine"`` (default, backward compatible): cosine similarity
+          between each song's min-max scaled feature vector and the
+          scaled taste profile.  Raw similarities are then min-max
+          normalized to 0–1.
+        * ``"euclidean"``: ``-Σ w_i · (track_i − profile_i)²`` in the
+          scaled feature space, where ``w_i`` comes from ``weights``.
+          Raw scores are min-max normalized to 0–1 for the output.
+          The raw, un-normalized score decomposes exactly into per-feature
+          attributions returned by :meth:`explain`.
 
         Parameters
         ----------
         top_n : int, optional
-            If provided, return only the top N highest-scoring songs.
+            If provided, return only the top ``top_n`` highest-scoring songs.
         exclude_liked : bool, default True
             If True, liked songs are excluded from the results (they'd
             trivially score near the top).
+        method : {"cosine", "euclidean"}, default "cosine"
+            Scoring backend.  Cosine preserves the original behavior;
+            euclidean gives an exact per-feature decomposition.
+        weights : {"uniform", "inverse_variance"}, default "uniform"
+            Only used for ``method="euclidean"``.  ``"inverse_variance"``
+            down-weights features where the liked set is inconsistent and
+            up-weights features the user is consistent on.  Falls back to
+            uniform (with a warning) when fewer than two songs are liked.
+        return_explanations : bool, default False
+            When True, add a ``top_matches`` column summarizing the three
+            features that contributed most to each track's score.
 
         Returns
         -------
         pd.DataFrame
-            Dataset with an added 'preference_score' column (0–1),
-            sorted descending. Columns: track_id, track_name, artists,
-            track_genre, popularity, preference_score.
+            Dataset sorted by ``preference_score`` descending.  Columns:
+            ``track_id, track_name, artists, track_genre, popularity,
+            preference_score`` (plus ``top_matches`` when requested).
         """
-        profile = self.build_profile()
+        scaled_matrix, profile_scaled = self._scaled_feature_space()
+        raw_scores = self._raw_scores(
+            scaled_matrix=scaled_matrix,
+            profile_scaled=profile_scaled,
+            method=method,
+            weights=weights,
+        )
 
-        # Normalize all feature vectors and the profile onto the same scale.
-        # loudness is negative and tempo is in the hundreds — raw cosine
-        # similarity without scaling would be dominated by those columns.
-        scaler = MinMaxScaler()
-        feature_matrix = self.df[AUDIO_FEATURES].copy()
-        feature_matrix_scaled = scaler.fit_transform(feature_matrix)
-
-        # Wrap the profile as a DataFrame with matching column names so
-        # sklearn doesn't warn about the transformer losing feature names.
-        profile_df = profile.reindex(AUDIO_FEATURES).to_frame().T
-        profile_scaled = scaler.transform(profile_df)
-
-        # Cosine similarity: shape is (n_songs, 1)
-        similarities = cosine_similarity(feature_matrix_scaled, profile_scaled).flatten()
+        normalized = self._minmax(raw_scores)
 
         result = self.df.copy()
-        result["preference_score"] = similarities
+        result["preference_score"] = np.round(normalized, 4)
 
-        # Normalize scores to 0–1
-        min_score = result["preference_score"].min()
-        max_score = result["preference_score"].max()
-        if max_score > min_score:
-            result["preference_score"] = (
-                (result["preference_score"] - min_score) / (max_score - min_score)
+        if return_explanations:
+            weight_vector = self._compute_weights(weights)
+            deltas = scaled_matrix - profile_scaled
+            result["top_matches"] = self._describe_top_matches(
+                deltas=deltas, weights=weight_vector, method=method
             )
-        else:
-            result["preference_score"] = 0.0
-
-        result["preference_score"] = result["preference_score"].round(4)
 
         if exclude_liked:
             result = result[~result["track_id"].isin(self.liked_ids)]
 
-        result = result.sort_values("preference_score", ascending=False).reset_index(drop=True)
+        result = result.sort_values(
+            "preference_score", ascending=False
+        ).reset_index(drop=True)
 
-        output_cols = ["track_id", "track_name", "artists", "track_genre", "popularity", "preference_score"]
+        output_cols = [
+            "track_id",
+            "track_name",
+            "artists",
+            "track_genre",
+            "popularity",
+            "preference_score",
+        ]
+        if return_explanations:
+            output_cols.append("top_matches")
         result = result[output_cols]
 
         if top_n is not None:
             return result.head(top_n)
 
         return result
+
+    # ------------------------------------------------------------------
+    # Explanations
+    # ------------------------------------------------------------------
+
+    def explain(
+        self,
+        track_id: str,
+        method: ScoringMethod = "cosine",
+        weights: WeightingScheme = "uniform",
+    ) -> pd.DataFrame:
+        """
+        Break a track's score down into per-feature contributions.
+
+        Returns one row per audio feature with the raw and scaled values
+        for both the track and the taste profile, the signed and absolute
+        delta between them, and the weight used for that feature.  When
+        ``method="euclidean"``, an additional ``attribution`` column is
+        included; summing it reproduces the track's raw (un-normalized)
+        score.
+
+        Rows are sorted by ``abs_delta`` ascending so the strongest
+        matches appear first.
+
+        Parameters
+        ----------
+        track_id : str
+            Spotify track ID to explain.  Must exist in the dataset.
+        method : {"cosine", "euclidean"}
+            Must match the method used to compute the score being
+            explained.  Only affects which columns are returned.
+        weights : {"uniform", "inverse_variance"}
+            Weighting scheme applied when ``method="euclidean"``.
+
+        Raises
+        ------
+        ValueError
+            If ``track_id`` is not in the dataset, or the liked list is
+            empty so no profile can be built.
+        """
+        if not self.liked_ids:
+            raise ValueError(
+                "Liked songs list is empty. Add songs with add_by_id() or "
+                "add_by_name() before asking for an explanation."
+            )
+        track_rows = self.df.index[self.df["track_id"] == track_id]
+        if len(track_rows) == 0:
+            raise ValueError(f"track_id '{track_id}' not found in dataset.")
+        row_idx = int(track_rows[0])
+
+        scaled_matrix, profile_scaled = self._scaled_feature_space()
+        track_scaled = scaled_matrix[row_idx]
+
+        profile_raw = self.build_profile().reindex(AUDIO_FEATURES)
+        track_raw = self.df.loc[row_idx, AUDIO_FEATURES].astype(float)
+
+        weight_vector = self._compute_weights(weights)
+        delta = track_scaled - profile_scaled.flatten()
+
+        explanation = pd.DataFrame({
+            "feature": AUDIO_FEATURES,
+            "track_raw": track_raw.values,
+            "profile_raw": profile_raw.values,
+            "track_scaled": track_scaled,
+            "profile_scaled": profile_scaled.flatten(),
+            "delta": delta,
+            "abs_delta": np.abs(delta),
+            "weight": weight_vector,
+        })
+
+        if method == "euclidean":
+            # Per-feature contribution to the raw (negative squared
+            # distance) score.  sum(attribution) == raw score exactly.
+            explanation["attribution"] = -weight_vector * delta ** 2
+
+        return explanation.sort_values("abs_delta").reset_index(drop=True)
+
+    def explain_top(
+        self,
+        track_id: str,
+        n: int = 3,
+        method: ScoringMethod = "cosine",
+        weights: WeightingScheme = "uniform",
+    ) -> dict[str, pd.DataFrame]:
+        """
+        Return the ``n`` features that match best and worst for a track.
+
+        A thin wrapper around :meth:`explain` that slices the head and
+        tail of the sorted explanation.
+
+        Parameters
+        ----------
+        track_id : str
+            Spotify track ID to summarize.
+        n : int, default 3
+            Number of features to include in each bucket.
+        method : {"cosine", "euclidean"}
+            Passed through to :meth:`explain`.
+        weights : {"uniform", "inverse_variance"}
+            Passed through to :meth:`explain`.
+
+        Returns
+        -------
+        dict[str, pd.DataFrame]
+            ``{"matches": ..., "mismatches": ...}`` — the ``n`` features
+            with the smallest and largest ``abs_delta`` respectively.
+        """
+        if n < 1:
+            raise ValueError(f"n must be >= 1, got {n}")
+
+        explanation = self.explain(track_id, method=method, weights=weights)
+        return {
+            "matches": explanation.head(n).reset_index(drop=True),
+            "mismatches": (
+                explanation.tail(n)
+                .sort_values("abs_delta", ascending=False)
+                .reset_index(drop=True)
+            ),
+        }
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _scaled_feature_space(self) -> tuple[np.ndarray, np.ndarray]:
+        """Min-max scale the feature matrix and the taste profile together.
+
+        Returns the scaled feature matrix (shape ``n_tracks × n_features``)
+        and the scaled profile vector (shape ``1 × n_features``).
+        """
+        profile = self.build_profile()
+
+        scaler = MinMaxScaler()
+        feature_matrix = self.df[AUDIO_FEATURES].copy()
+        feature_matrix_scaled = scaler.fit_transform(feature_matrix)
+
+        # DataFrame wrapper keeps sklearn from warning about lost feature names.
+        profile_df = profile.reindex(AUDIO_FEATURES).to_frame().T
+        profile_scaled = scaler.transform(profile_df)
+
+        return feature_matrix_scaled, profile_scaled
+
+    def _raw_scores(
+        self,
+        scaled_matrix: np.ndarray,
+        profile_scaled: np.ndarray,
+        method: ScoringMethod,
+        weights: WeightingScheme,
+    ) -> np.ndarray:
+        """Dispatch to the requested scoring method and return raw scores."""
+        if method == "cosine":
+            return cosine_similarity(scaled_matrix, profile_scaled).flatten()
+        if method == "euclidean":
+            weight_vector = self._compute_weights(weights)
+            deltas = scaled_matrix - profile_scaled
+            return -np.sum(weight_vector * deltas ** 2, axis=1)
+        raise ValueError(
+            f"Unknown method '{method}'. Expected 'cosine' or 'euclidean'."
+        )
+
+    def _compute_weights(self, weights: WeightingScheme) -> np.ndarray:
+        """Return the per-feature weights normalized to sum to 1.
+
+        ``"uniform"`` gives every feature equal weight.
+        ``"inverse_variance"`` uses ``1 / (var + eps)`` of the liked
+        songs' scaled features, so features the user is consistent on
+        dominate the score.  Falls back to uniform (with a warning)
+        when fewer than two songs are liked.
+        """
+        n_features = len(AUDIO_FEATURES)
+        if weights == "uniform":
+            return np.full(n_features, 1.0 / n_features)
+        if weights == "inverse_variance":
+            if len(self.liked_ids) < 2:
+                warnings.warn(
+                    "inverse_variance weighting needs at least 2 liked songs; "
+                    "falling back to uniform weights.",
+                    stacklevel=3,
+                )
+                return np.full(n_features, 1.0 / n_features)
+
+            liked_df = self.df[self.df["track_id"].isin(self.liked_ids)]
+            # Fit the scaler on the full dataset so the variance is
+            # measured in the same space the predictions live in.
+            scaler = MinMaxScaler()
+            scaler.fit(self.df[AUDIO_FEATURES])
+            liked_scaled = scaler.transform(liked_df[AUDIO_FEATURES])
+
+            variances = liked_scaled.var(axis=0, ddof=0)
+            inv = 1.0 / (variances + _VARIANCE_EPS)
+            return inv / inv.sum()
+        raise ValueError(
+            f"Unknown weights '{weights}'. Expected 'uniform' or 'inverse_variance'."
+        )
+
+    @staticmethod
+    def _minmax(values: np.ndarray) -> np.ndarray:
+        """Min-max normalize a 1-D score array to the 0–1 range."""
+        lo = float(np.min(values))
+        hi = float(np.max(values))
+        if hi > lo:
+            return (values - lo) / (hi - lo)
+        return np.zeros_like(values, dtype=float)
+
+    @staticmethod
+    def _describe_top_matches(
+        deltas: np.ndarray,
+        weights: np.ndarray,
+        method: ScoringMethod,
+        n: int = 3,
+    ) -> list[str]:
+        """One-line ``top_matches`` string per row for :meth:`predict`.
+
+        For cosine we rank by raw absolute delta (smaller = closer); for
+        euclidean we rank by per-feature attribution (less negative = closer).
+        Returns the ``n`` best-matching feature names per row, joined with
+        commas.
+        """
+        abs_deltas = np.abs(deltas)
+        if method == "euclidean":
+            abs_deltas = weights * abs_deltas ** 2  # non-negative ranking key
+
+        # argsort gives indices of the smallest values first.
+        top_idx = np.argsort(abs_deltas, axis=1)[:, :n]
+        feature_array = np.array(AUDIO_FEATURES)
+        return [", ".join(feature_array[row].tolist()) for row in top_idx]
 
     # ------------------------------------------------------------------
     # Saving and loading the liked list
