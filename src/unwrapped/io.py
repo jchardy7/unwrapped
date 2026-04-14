@@ -27,3 +27,11 @@ def load_data(path: str) -> pd.DataFrame:
         df = df.drop(columns=["Unnamed: 0"])
 
     return df
+
+def load_json(path: str) -> pd.DataFrame:
+    """Load a Spotify JSON export into a DataFrame."""
+    df = pd.read_json(path)
+    if "Unnamed: 0" in df.columns:
+        df = df.drop(columns=["Unnamed: 0"])
+    return df
+
