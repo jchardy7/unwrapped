@@ -8,10 +8,14 @@ dictionary.
 
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
 import pandas as pd
 
 from .clean import BOUNDED_AUDIO_COLUMNS, NUMERIC_COLUMNS, TEXT_COLUMNS
+
+DEFAULT_OUTPUT_DIR = "outputs"
 
 AUDIO_FEATURE_COLUMNS = [
     "danceability",
@@ -232,6 +236,10 @@ def target_correlations(
     """
 
     if target not in df.columns:
+        warnings.warn(
+            f"target column '{target}' not found; returning empty correlations",
+            stacklevel=2,
+        )
         return {}
 
     target_series = pd.to_numeric(df[target], errors="coerce")
@@ -243,6 +251,10 @@ def target_correlations(
         feature = pd.to_numeric(df[col], errors="coerce")
         valid = target_series.notna() & feature.notna()
         if valid.sum() < 2:
+            continue
+        # Skip constant columns: their zero variance would make pandas
+        # delegate to np.corrcoef and raise a divide-by-zero RuntimeWarning.
+        if target_series[valid].nunique() < 2 or feature[valid].nunique() < 2:
             continue
         correlations[col] = round(float(target_series[valid].corr(feature[valid])), 4)
 
@@ -264,6 +276,10 @@ def genre_summary(df: pd.DataFrame) -> pd.DataFrame:
     """
 
     if "track_genre" not in df.columns:
+        warnings.warn(
+            "'track_genre' column missing; returning empty genre summary",
+            stacklevel=2,
+        )
         return pd.DataFrame()
 
     feature_cols = [c for c in AUDIO_FEATURE_COLUMNS if c in df.columns]
@@ -299,6 +315,13 @@ def popularity_by_genre_pivot(
     """
 
     if "track_genre" not in df.columns or "popularity" not in df.columns:
+        missing = [
+            c for c in ("track_genre", "popularity") if c not in df.columns
+        ]
+        warnings.warn(
+            f"columns {missing} missing; returning empty popularity pivot",
+            stacklevel=2,
+        )
         return pd.DataFrame()
 
     if bins is None:
@@ -354,7 +377,9 @@ def summarize_data(df: pd.DataFrame) -> dict[str, object]:
     }
 
 
-def export_summary_csvs(df: pd.DataFrame, output_dir: str = "outputs") -> dict[str, str]:
+def export_summary_csvs(
+    df: pd.DataFrame, output_dir: str = DEFAULT_OUTPUT_DIR
+) -> dict[str, str]:
     """Export key summary results as CSV files for the visualization module.
 
     Writes four CSV files that the visualization team can load directly
@@ -373,7 +398,7 @@ def export_summary_csvs(df: pd.DataFrame, output_dir: str = "outputs") -> dict[s
     ----------
     df : pd.DataFrame
         Spotify dataset to summarize and export.
-    output_dir : str, default "outputs"
+    output_dir : str, default :data:`DEFAULT_OUTPUT_DIR`
         Directory to write CSV files into. Created if it does not exist.
 
     Returns

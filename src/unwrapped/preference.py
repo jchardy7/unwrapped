@@ -24,26 +24,13 @@ Example:
 """
 
 import json
+from pathlib import Path
 
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics.pairwise import cosine_similarity
 
-
-# The 9 continuous audio features used to build the taste profile.
-# These are kept as a module-level constant so other modules can import
-# and reuse the same feature set.
-AUDIO_FEATURES = [
-    "danceability",
-    "energy",
-    "loudness",
-    "speechiness",
-    "acousticness",
-    "instrumentalness",
-    "liveness",
-    "valence",
-    "tempo",
-]
+from .constants import AUDIO_FEATURES
 
 
 class LikedSongs:
@@ -236,7 +223,10 @@ class LikedSongs:
         feature_matrix = self.df[AUDIO_FEATURES].copy()
         feature_matrix_scaled = scaler.fit_transform(feature_matrix)
 
-        profile_scaled = scaler.transform(profile.values.reshape(1, -1))
+        # Wrap the profile as a DataFrame with matching column names so
+        # sklearn doesn't warn about the transformer losing feature names.
+        profile_df = profile.reindex(AUDIO_FEATURES).to_frame().T
+        profile_scaled = scaler.transform(profile_df)
 
         # Cosine similarity: shape is (n_songs, 1)
         similarities = cosine_similarity(feature_matrix_scaled, profile_scaled).flatten()
@@ -281,9 +271,16 @@ class LikedSongs:
         ----------
         filepath : str
             Path to write the JSON file (e.g., 'my_likes.json').
+
+        Raises
+        ------
+        OSError
+            If the file cannot be written (permissions, disk full, etc.).
         """
-        with open(filepath, "w") as f:
-            json.dump(list(self.liked_ids), f, indent=2)
+        path = Path(filepath)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
+            json.dump(sorted(self.liked_ids), f, indent=2)
 
     def load(self, filepath: str) -> None:
         """
@@ -296,9 +293,30 @@ class LikedSongs:
         ----------
         filepath : str
             Path to the JSON file to load.
+
+        Raises
+        ------
+        FileNotFoundError
+            If the file does not exist.
+        ValueError
+            If the file does not contain a JSON list of track IDs.
         """
-        with open(filepath, "r") as f:
-            ids = json.load(f)
+        path = Path(filepath)
+        if not path.exists():
+            raise FileNotFoundError(f"Liked songs file not found: {filepath}")
+
+        with path.open("r") as f:
+            try:
+                ids = json.load(f)
+            except json.JSONDecodeError as exc:
+                raise ValueError(
+                    f"Could not parse liked songs file '{filepath}': {exc}"
+                ) from exc
+
+        if not isinstance(ids, list):
+            raise ValueError(
+                f"Liked songs file '{filepath}' must contain a JSON list of track IDs."
+            )
 
         skipped = 0
         for track_id in ids:

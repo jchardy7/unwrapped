@@ -16,19 +16,8 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .constants import AUDIO_FEATURES
 from .io import load_data
-
-AUDIO_FEATURES = [
-    "danceability",
-    "energy",
-    "loudness",
-    "speechiness",
-    "acousticness",
-    "instrumentalness",
-    "liveness",
-    "valence",
-    "tempo",
-]
 
 
 # ---------------------------------------------------------------------------
@@ -114,10 +103,16 @@ def compute_genre_deviations(df: pd.DataFrame) -> pd.DataFrame:
         safe_stds = np.where(stds > 0, stds, np.nan)
         z_scores[:, i] = (values - means) / safe_stds
 
-    # Overall deviation = mean absolute z-score across all features
-    enriched["genre_deviation_score"] = np.round(
-        np.nanmean(np.abs(z_scores), axis=1), 4
-    )
+    # Overall deviation = mean absolute z-score across all features.
+    # Tracks in single-track genres have all-NaN z-score rows (std is 0),
+    # so compute nanmean only for rows that have at least one valid value
+    # and leave the rest as NaN — avoids a "Mean of empty slice" warning.
+    abs_z = np.abs(z_scores)
+    has_valid = ~np.all(np.isnan(abs_z), axis=1)
+    deviation = np.full(len(enriched), np.nan)
+    if has_valid.any():
+        deviation[has_valid] = np.nanmean(abs_z[has_valid], axis=1)
+    enriched["genre_deviation_score"] = np.round(deviation, 4)
 
     for i, feature in enumerate(AUDIO_FEATURES):
         enriched[f"{feature}_zscore"] = np.round(z_scores[:, i], 4)
@@ -300,6 +295,16 @@ def popularity_by_feature_buckets(
     pd.DataFrame
         One row per bucket with ``avg_popularity`` and ``track_count``.
     """
+
+    if feature not in df.columns:
+        raise ValueError(
+            f"feature '{feature}' not in DataFrame. "
+            f"Available columns: {sorted(df.columns.tolist())}"
+        )
+    if "popularity" not in df.columns:
+        raise ValueError("DataFrame must contain a 'popularity' column.")
+    if n_buckets < 1:
+        raise ValueError(f"n_buckets must be >= 1, got {n_buckets}")
 
     tmp = df[[feature, "popularity"]].dropna().copy()
     values = tmp[feature].values.astype(float)

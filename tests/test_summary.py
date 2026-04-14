@@ -269,7 +269,8 @@ class TestTargetCorrelations:
 
     def test_returns_empty_when_target_missing(self) -> None:
         df = make_test_df().drop(columns=["popularity"])
-        result = target_correlations(df)
+        with pytest.warns(UserWarning, match="target column"):
+            result = target_correlations(df)
 
         assert result == {}
 
@@ -293,7 +294,8 @@ class TestGenreSummary:
 
     def test_returns_empty_when_no_genre_column(self) -> None:
         df = make_test_df().drop(columns=["track_genre"])
-        result = genre_summary(df)
+        with pytest.warns(UserWarning, match="track_genre"):
+            result = genre_summary(df)
 
         assert result.empty
 
@@ -334,7 +336,8 @@ class TestPopularityByGenrePivot:
 
     def test_returns_empty_when_columns_missing(self) -> None:
         df = make_test_df().drop(columns=["track_genre"])
-        result = popularity_by_genre_pivot(df)
+        with pytest.warns(UserWarning, match="missing"):
+            result = popularity_by_genre_pivot(df)
 
         assert result.empty
 

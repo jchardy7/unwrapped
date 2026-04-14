@@ -1,18 +1,24 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
+from sklearn.linear_model import LinearRegression
 
 from unwrapped.popularity import (
-    validate_data,
+    compare_models,
+    cross_validate_model,
+    evaluate_model,
+    get_feature_importance,
     handle_missing_values,
     preprocess_data,
+    run_popularity_pipeline,
+    save_outputs,
     split_data,
     train_linear_model,
     train_random_forest,
-    evaluate_model,
-    compare_models,
-    get_feature_importance,
+    validate_data,
 )
 
 
@@ -249,3 +255,85 @@ def test_get_feature_importance_sorted_desc(sample_df):
     importances = get_feature_importance(model, X_train, top_n=5)
 
     assert importances["importance"].is_monotonic_decreasing
+
+
+# Cross-validation should return RMSE and R^2 summary statistics.
+def test_cross_validate_model_returns_expected_keys(sample_df):
+    processed = preprocess_data(sample_df)
+    X_train, _, y_train, _ = split_data(processed, test_size=0.25)
+
+    cv_results = cross_validate_model(LinearRegression(), X_train, y_train, cv=3)
+
+    assert set(cv_results.keys()) == {"cv_rmse_mean", "cv_rmse_std", "cv_r2_mean"}
+    assert isinstance(cv_results["cv_rmse_mean"], float)
+    assert cv_results["cv_rmse_mean"] >= 0
+    assert cv_results["cv_rmse_std"] >= 0
+
+
+# save_outputs should write three CSVs into the requested directory.
+def test_save_outputs_writes_three_csvs(tmp_path: Path):
+    comparison = pd.DataFrame({"model": ["A", "B"], "rmse": [1.0, 2.0]})
+    importance = pd.DataFrame({"feature": ["x", "y"], "importance": [0.6, 0.4]})
+    predictions = pd.DataFrame(
+        {"actual_popularity": [50, 60], "linear_prediction": [49.0, 61.0]}
+    )
+
+    output_dir = tmp_path / "nested" / "outputs"
+    paths = save_outputs(comparison, importance, predictions, output_dir=output_dir)
+
+    assert set(paths.keys()) == {"comparison", "feature_importance", "predictions"}
+    assert (output_dir / "popularity_model_comparison.csv").exists()
+    assert (output_dir / "popularity_feature_importance.csv").exists()
+    assert (output_dir / "popularity_predictions.csv").exists()
+
+    round_trip = pd.read_csv(output_dir / "popularity_model_comparison.csv")
+    assert list(round_trip.columns) == ["model", "rmse"]
+
+
+# run_popularity_pipeline should call load_data, train both models, and save outputs.
+def test_run_popularity_pipeline_end_to_end(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_df
+):
+    # Expand the fixture with more rows so cross-validation has enough data.
+    big_df = pd.concat([sample_df] * 6, ignore_index=True)
+    big_df["track_id"] = [str(i) for i in range(len(big_df))]
+
+    def fake_load(path: str) -> pd.DataFrame:
+        assert path == "fake.csv"
+        return big_df
+
+    monkeypatch.setattr("unwrapped.popularity.load_data", fake_load)
+
+    output_dir = tmp_path / "pipeline_outputs"
+    result = run_popularity_pipeline(
+        data_path="fake.csv",
+        save_results=True,
+        output_dir=output_dir,
+    )
+
+    assert {"linear_model", "random_forest_model", "comparison",
+            "feature_importance", "predictions"} <= result.keys()
+    assert not result["comparison"].empty
+    assert not result["feature_importance"].empty
+    assert (output_dir / "popularity_model_comparison.csv").exists()
+    assert (output_dir / "popularity_feature_importance.csv").exists()
+    assert (output_dir / "popularity_predictions.csv").exists()
+
+
+# Passing save_results=False should skip writing files.
+def test_run_popularity_pipeline_skips_saving_when_disabled(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, sample_df
+):
+    big_df = pd.concat([sample_df] * 6, ignore_index=True)
+    big_df["track_id"] = [str(i) for i in range(len(big_df))]
+
+    monkeypatch.setattr("unwrapped.popularity.load_data", lambda _: big_df)
+
+    output_dir = tmp_path / "should_not_exist"
+    run_popularity_pipeline(
+        data_path="fake.csv",
+        save_results=False,
+        output_dir=output_dir,
+    )
+
+    assert not output_dir.exists()
