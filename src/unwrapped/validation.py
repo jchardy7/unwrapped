@@ -40,7 +40,7 @@ def validate_ranges(df: pd.DataFrame) -> None:
     errors = []
 
     def check_range(col: str, low: float, high: float) -> None:
-        if not df[col].between(low, high).all():
+        if not df[col].dropna().between(low, high).all():
             errors.append(f"{col} out of range [{low}, {high}]")
 
     check_range("danceability", 0, 1)
