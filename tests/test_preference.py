@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
 from typing import Any
+from unittest.mock import mock_open
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -121,6 +123,29 @@ class TestShow:
 
 
 class TestPredict:
+    def test_predict_returns_zero_scores_when_all_tracks_match_profile(self) -> None:
+        df = pd.DataFrame([
+            make_row(track_id="t1", track_name="Song A", artists="Artist A"),
+            make_row(track_id="t2", track_name="Song B", artists="Artist B"),
+            make_row(track_id="t3", track_name="Song C", artists="Artist C"),
+        ])
+        liked = LikedSongs(df)
+        liked.add_by_id("t1")
+
+        scores = liked.predict()
+
+        assert set(scores["track_id"]) == {"t2", "t3"}
+        assert (scores["preference_score"] == 0.0).all()
+
+    def test_predict_ranks_single_liked_track_first_when_included(self) -> None:
+        liked = LikedSongs(make_df())
+        liked.add_by_id("t1")
+
+        scores = liked.predict(top_n=1, exclude_liked=False)
+
+        assert scores.iloc[0]["track_id"] == "t1"
+        assert scores.iloc[0]["preference_score"] == pytest.approx(1.0)
+
     def test_predict_returns_scores_in_range(self) -> None:
         liked = LikedSongs(make_df())
         liked.add_by_id("t1")
@@ -181,6 +206,12 @@ class TestPredict:
 
 
 class TestBuildProfile:
+    def test_profile_raises_when_empty(self) -> None:
+        liked = LikedSongs(make_df())
+
+        with pytest.raises(ValueError, match="empty"):
+            liked.build_profile()
+
     def test_profile_returns_mean_of_liked(self) -> None:
         df = make_df()
         liked = LikedSongs(df)
@@ -197,33 +228,50 @@ class TestBuildProfile:
 
 
 class TestSaveLoad:
-    def test_roundtrip(self, tmp_path: Path) -> None:
+    def test_save_creates_parent_dirs_and_writes_sorted_ids(self) -> None:
         liked = LikedSongs(make_df())
-        liked.add_by_id("t1")
         liked.add_by_id("t3")
-
-        filepath = tmp_path / "likes.json"
-        liked.save(str(filepath))
-
-        liked2 = LikedSongs(make_df())
-        liked2.load(str(filepath))
-
-        assert liked2.liked_ids == {"t1", "t3"}
-
-    def test_load_skips_unknown_ids(self, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
-        liked = LikedSongs(make_df())
         liked.add_by_id("t1")
 
-        filepath = tmp_path / "likes.json"
-        liked.save(str(filepath))
+        with patch("pathlib.Path.mkdir") as mkdir_mock, patch(
+            "pathlib.Path.open", mock_open()
+        ), patch("unwrapped.preference.json.dump") as dump_mock:
+            liked.save("nested/likes.json")
 
-        # Load into a dataset that doesn't contain t1
+        mkdir_mock.assert_called_once_with(parents=True, exist_ok=True)
+        assert dump_mock.call_args.args[0] == ["t1", "t3"]
+        assert dump_mock.call_args.kwargs["indent"] == 2
+
+    def test_load_adds_known_ids_from_json_list(self) -> None:
+        liked = LikedSongs(make_df())
+
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.open", mock_open(read_data='["t1", "t3"]')
+        ):
+            liked.load("likes.json")
+
+        assert liked.liked_ids == {"t1", "t3"}
+
+    def test_load_skips_unknown_ids(self, capsys: pytest.CaptureFixture[str]) -> None:
         small_df = make_df().query("track_id != 't1'").reset_index(drop=True)
-        liked2 = LikedSongs(small_df)
-        liked2.load(str(filepath))
+        liked = LikedSongs(small_df)
 
-        assert "t1" not in liked2.liked_ids
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.open", mock_open(read_data='["t1"]')
+        ):
+            liked.load("likes.json")
+
+        assert "t1" not in liked.liked_ids
         assert "Warning" in capsys.readouterr().out
+
+    def test_load_raises_when_json_payload_is_not_a_list(self) -> None:
+        liked = LikedSongs(make_df())
+
+        with patch("pathlib.Path.exists", return_value=True), patch(
+            "pathlib.Path.open", mock_open(read_data=json.dumps({"track_id": "t1"}))
+        ):
+            with pytest.raises(ValueError, match="must contain a JSON list"):
+                liked.load("likes.json")
 
 
 class TestValidation:
