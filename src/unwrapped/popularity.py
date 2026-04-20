@@ -435,7 +435,16 @@ def run_popularity_pipeline(
 
 
 def main() -> None:
-    run_popularity_pipeline("data/raw/spotify_data.csv")
+    data_path = "data/raw/spotify_data.csv"
+    try:
+        run_popularity_pipeline(data_path)
+    except FileNotFoundError:
+        print(
+            f"Error: data file not found at '{data_path}'.\n"
+            "Make sure you are running this script from the repository root\n"
+            "and that the Spotify dataset has been placed at data/raw/spotify_data.csv."
+        )
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

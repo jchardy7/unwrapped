@@ -319,6 +319,51 @@ def test_run_popularity_pipeline_end_to_end(
     assert (output_dir / "popularity_feature_importance.csv").exists()
     assert (output_dir / "popularity_predictions.csv").exists()
 
+def test_main_calls_pipeline_with_correct_default_path(monkeypatch: pytest.MonkeyPatch):
+    """Verify main() passes the repository-root-relative default path.
+ 
+    This guards against regressions where the path is changed back to a
+    bare filename (e.g. 'spotify_data.csv') that only works when the
+    working directory happens to be data/raw/.
+    """
+    calls: list[str] = []
+ 
+    def fake_pipeline(data_path: str, **kwargs):
+        calls.append(data_path)
+        return {}
+ 
+    monkeypatch.setattr("unwrapped.popularity.run_popularity_pipeline", fake_pipeline)
+ 
+    from unwrapped.popularity import main
+    main()
+ 
+    assert calls == ["data/raw/spotify_data.csv"], (
+        f"main() called run_popularity_pipeline with {calls!r}; "
+        "expected ['data/raw/spotify_data.csv']"
+    )
+
+def test_run_popularity_pipeline_raises_on_missing_file(tmp_path: Path):
+    """A missing CSV should surface as a FileNotFoundError, not a silent failure."""
+    nonexistent = str(tmp_path / "does_not_exist.csv")
+ 
+    with pytest.raises(FileNotFoundError):
+        run_popularity_pipeline(data_path=nonexistent, save_results=False)
+
+def test_main_exits_cleanly_when_data_file_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    """A missing dataset should produce SystemExit(1), not an unhandled exception."""
+    monkeypatch.setattr(
+        "unwrapped.popularity.run_popularity_pipeline",
+        lambda *a, **kw: (_ for _ in ()).throw(FileNotFoundError("data/raw/spotify_data.csv")),
+    )
+ 
+    from unwrapped.popularity import main
+ 
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+ 
+    assert exc_info.value.code == 1
 
 # Passing save_results=False should skip writing files.
 def test_run_popularity_pipeline_skips_saving_when_disabled(
