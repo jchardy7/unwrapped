@@ -71,11 +71,12 @@ unwrapped/
 ├── scripts/                # Demo scripts for each workflow
 │   ├── demo_analysis.py    # Main analysis (research questions)
 │   ├── demo_cleaning.py    # Cleaning pipeline demo
+│   ├── demo_json_loading.py  # JSON loading demo
 │   ├── demo_summary.py     # Descriptive statistics demo
 │   ├── demo_validation.py  # Data quality checks demo
 │   └── demo_visualization.py  # Chart generation
 ├── src/unwrapped/          # Package source code
-│   ├── io.py               # CSV loading
+│   ├── io.py               # CSV and JSON loading
 │   ├── clean.py            # Data cleaning pipeline
 │   ├── validation.py       # Schema and range validation
 │   ├── summary.py          # Descriptive statistics / EDA
@@ -92,8 +93,9 @@ unwrapped/
 
 ### Data Loading (`io.py`)
 
-Reads the raw CSV into a pandas DataFrame. Automatically removes the
-`Unnamed: 0` index column that some Spotify CSV exports include.
+Reads Spotify data into a pandas DataFrame. Supports both CSV ('load_data')
+and JSON ('load_json') formats. Automatically removes the `Unnamed: 0` 
+index column that some Spotify exports include.
 
 ### Cleaning (`clean.py`)
 
