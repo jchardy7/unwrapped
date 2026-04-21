@@ -1,116 +1,221 @@
-"""Tests for the loading utilities in :mod:`unwrapped.io`."""
+"""Tests for the loading and IO-adjacent entrypoints."""
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import pytest
 
-from unwrapped.io import load_data, load_json
+from unwrapped.clean import run_cleaning
+from unwrapped.io import load_data
+from unwrapped.validation import run_validation
 
 
-@pytest.fixture
-def sample_csv(tmp_path: Path) -> Path:
-    """Write a minimal Spotify-like CSV and return its path."""
-    path = tmp_path / "tracks.csv"
-    path.write_text(
-        "track_id,artists,track_name,popularity\n"
-        "id-1,Artist A,Song A,80\n"
-        "id-2,Artist B,Song B,60\n"
+def make_valid_row(**overrides: Any) -> dict[str, Any]:
+    """Build a single row that satisfies the cleaning and validation rules."""
+
+    row = {
+        "track_id": "track-1",
+        "artists": "Artist 1",
+        "album_name": "Album 1",
+        "track_name": "Song 1",
+        "popularity": 55,
+        "duration_ms": 180000,
+        "explicit": False,
+        "danceability": 0.5,
+        "energy": 0.8,
+        "key": 5,
+        "loudness": -5.0,
+        "mode": 1,
+        "speechiness": 0.2,
+        "acousticness": 0.3,
+        "instrumentalness": 0.1,
+        "liveness": 0.15,
+        "valence": 0.6,
+        "tempo": 120.0,
+        "time_signature": 4,
+        "track_genre": "pop",
+    }
+    row.update(overrides)
+    return row
+
+
+def make_valid_df() -> pd.DataFrame:
+    """Return a compact valid DataFrame for IO entrypoint tests."""
+
+    return pd.DataFrame(
+        [
+            make_valid_row(track_id="track-1", popularity=40, loudness=-6.0),
+            make_valid_row(
+                track_id="track-2",
+                track_name="Song 2",
+                popularity=70,
+                energy=0.85,
+                loudness=-5.0,
+            ),
+            make_valid_row(
+                track_id="track-3",
+                track_name="Song 3",
+                popularity=85,
+                energy=0.9,
+                loudness=-4.0,
+            ),
+        ]
     )
-    return path
 
 
-@pytest.fixture
-def csv_with_index(tmp_path: Path) -> Path:
-    """Write a CSV that includes the common ``Unnamed: 0`` export column."""
-    path = tmp_path / "tracks_indexed.csv"
-    path.write_text(
-        "Unnamed: 0,track_id,artists,track_name,popularity\n"
-        "0,id-1,Artist A,Song A,80\n"
-        "1,id-2,Artist B,Song B,60\n"
+def test_load_data_reads_csv_and_drops_export_index_column(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`load_data` should delegate to pandas and strip `Unnamed: 0`."""
+
+    raw_df = pd.DataFrame(
+        {
+            "Unnamed: 0": [0, 1],
+            "track_id": ["id-1", "id-2"],
+            "artists": ["Artist A", "Artist B"],
+            "track_name": ["Song A", "Song B"],
+            "popularity": [80, 60],
+        }
     )
-    return path
+    calls: list[str] = []
 
+    def fake_read_csv(path: str) -> pd.DataFrame:
+        calls.append(path)
+        return raw_df
 
-def test_load_data_reads_csv(sample_csv: Path) -> None:
-    """load_data should return a DataFrame with the expected rows and columns."""
-    df = load_data(str(sample_csv))
+    monkeypatch.setattr("unwrapped.io.pd.read_csv", fake_read_csv)
 
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 2
+    df = load_data("fake/path.csv")
+
+    assert calls == ["fake/path.csv"]
     assert list(df.columns) == ["track_id", "artists", "track_name", "popularity"]
+    assert df.to_dict("records") == [
+        {
+            "track_id": "id-1",
+            "artists": "Artist A",
+            "track_name": "Song A",
+            "popularity": 80,
+        },
+        {
+            "track_id": "id-2",
+            "artists": "Artist B",
+            "track_name": "Song B",
+            "popularity": 60,
+        },
+    ]
 
 
-def test_load_data_drops_unnamed_index_column(csv_with_index: Path) -> None:
-    """The ``Unnamed: 0`` column should be silently removed."""
-    df = load_data(str(csv_with_index))
+def test_load_data_preserves_columns_when_no_index_column_is_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`load_data` should return the original columns when no export index exists."""
 
-    assert "Unnamed: 0" not in df.columns
-    assert len(df.columns) == 4
-
-
-def test_load_data_preserves_columns_without_index(sample_csv: Path) -> None:
-    """When no index column is present, all original columns should survive."""
-    df = load_data(str(sample_csv))
-
-    assert list(df.columns) == ["track_id", "artists", "track_name", "popularity"]
-
-
-def test_load_data_raises_for_missing_file() -> None:
-    """A nonexistent path should raise an error."""
-    with pytest.raises((FileNotFoundError, OSError)):
-        load_data("nonexistent/path.csv")
-
-
-@pytest.fixture
-def sample_json(tmp_path: Path) -> Path:
-    """Write a minimal Spotify-like JSON and return its path."""
-    path = tmp_path / "tracks.json"
-    path.write_text(
-        '[{"track_id":"id-1","artists":"Artist A","track_name":"Song A","popularity":80},'
-        '{"track_id":"id-2","artists":"Artist B","track_name":"Song B","popularity":60}]'
+    raw_df = pd.DataFrame(
+        {
+            "track_id": ["id-1"],
+            "artists": ["Artist A"],
+            "track_name": ["Song A"],
+            "popularity": [80],
+        }
     )
-    return path
 
+    monkeypatch.setattr("unwrapped.io.pd.read_csv", lambda _: raw_df)
 
-@pytest.fixture
-def json_with_index(tmp_path: Path) -> Path:
-    """Write a JSON that includes the common ``Unnamed: 0`` export column."""
-    path = tmp_path / "tracks_indexed.json"
-    path.write_text(
-        '[{"Unnamed: 0":0,"track_id":"id-1","artists":"Artist A","track_name":"Song A","popularity":80},'
-        '{"Unnamed: 0":1,"track_id":"id-2","artists":"Artist B","track_name":"Song B","popularity":60}]'
-    )
-    return path
-
-
-def test_load_json_reads_json(sample_json: Path) -> None:
-    """load_json should return a DataFrame with the expected rows and columns."""
-    df = load_json(str(sample_json))
-
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) == 2
-    assert list(df.columns) == ["track_id", "artists", "track_name", "popularity"]
-
-
-def test_load_json_drops_unnamed_index_column(json_with_index: Path) -> None:
-    """The ``Unnamed: 0`` column should be silently removed."""
-    df = load_json(str(json_with_index))
-
-    assert "Unnamed: 0" not in df.columns
-    assert len(df.columns) == 4
-
-
-def test_load_json_preserves_columns_without_index(sample_json: Path) -> None:
-    """When no index column is present, all original columns should survive."""
-    df = load_json(str(sample_json))
+    df = load_data("fake/path.csv")
 
     assert list(df.columns) == ["track_id", "artists", "track_name", "popularity"]
+    assert df.equals(raw_df)
 
 
-def test_load_json_raises_for_missing_file() -> None:
-    """A nonexistent path should raise an error."""
-    with pytest.raises((FileNotFoundError, OSError, ValueError)):
-        load_json("nonexistent/path.json")
+def test_load_data_propagates_read_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """File-loading errors from pandas should surface to callers."""
+
+    def fake_read_csv(path: str) -> pd.DataFrame:
+        raise FileNotFoundError(path)
+
+    monkeypatch.setattr("unwrapped.io.pd.read_csv", fake_read_csv)
+
+    with pytest.raises(FileNotFoundError, match="missing.csv"):
+        load_data("missing.csv")
+
+
+def test_run_cleaning_loads_raw_data_and_returns_cleaned_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`run_cleaning` should load once, clean the data, and return the report."""
+
+    raw_df = pd.DataFrame(
+        [
+            make_valid_row(
+                track_id="track-1",
+                artists="  Artist 1  ",
+                explicit="TRUE",
+                popularity=60,
+            ),
+            make_valid_row(
+                track_id="track-1",
+                artists="Artist 1",
+                popularity=90,
+            ),
+            make_valid_row(
+                track_id="track-2",
+                track_name="   ",
+                explicit="maybe",
+            ),
+        ]
+    ).assign(**{"Unnamed: 0": [0, 1, 2]})
+    calls: list[str] = []
+
+    def fake_load_data(path: str) -> pd.DataFrame:
+        calls.append(path)
+        return raw_df
+
+    monkeypatch.setattr("unwrapped.io.load_data", fake_load_data)
+
+    cleaned, report = run_cleaning("fake/path.csv")
+
+    assert calls == ["fake/path.csv"]
+    assert list(cleaned["track_id"]) == ["track-1"]
+    assert cleaned.loc[0, "artists"] == "Artist 1"
+    assert cleaned.loc[0, "explicit"] == False
+    assert report["index_columns_removed"] == 1
+    assert report["blank_text_values"]["track_name"] == 1
+    assert report["rows_removed_total"] == 2
+
+
+def test_run_validation_loads_data_and_returns_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`run_validation` should validate the loaded data and return its report."""
+
+    df = make_valid_df()
+    calls: list[str] = []
+
+    def fake_load_data(path: str) -> pd.DataFrame:
+        calls.append(path)
+        return df
+
+    monkeypatch.setattr("unwrapped.io.load_data", fake_load_data)
+
+    returned_df, report = run_validation("fake/path.csv")
+
+    assert calls == ["fake/path.csv"]
+    assert returned_df.equals(df)
+    assert report["num_rows"] == len(df)
+    assert report["num_columns"] == len(df.columns)
+    assert report["unique_tracks"] == 3
+
+
+def test_run_validation_raises_when_loaded_data_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Invalid loaded data should fail through the public validation entrypoint."""
+
+    invalid_df = make_valid_df().drop(columns=["tempo"])
+
+    monkeypatch.setattr("unwrapped.io.load_data", lambda _: invalid_df)
+
+    with pytest.raises(ValueError, match="Missing columns"):
+        run_validation("fake/path.csv")

@@ -152,10 +152,28 @@ def test_validate_ranges_aggregates_multiple_failures() -> None:
     assert "duration_ms contains non-positive values" in message
 
 
-def test_validate_ranges_treats_missing_numeric_values_as_invalid() -> None:
-    """NaN in checked range columns should fail instead of silently passing."""
+def test_validate_ranges_ignores_missing_numeric_values() -> None:
+    """NaN in checked range columns should be excluded from range checks."""
 
-    df = pd.DataFrame([make_valid_row(energy=float("nan"))])
+    df = pd.DataFrame(
+        [
+            make_valid_row(energy=float("nan")),
+            make_valid_row(track_id="track-2", valence=float("nan")),
+        ]
+    )
+
+    validate_ranges(df)
+
+
+def test_validate_ranges_rejects_non_missing_out_of_range_values() -> None:
+    """Real out-of-range values should still fail even if other rows are missing."""
+
+    df = pd.DataFrame(
+        [
+            make_valid_row(energy=float("nan")),
+            make_valid_row(track_id="track-2", energy=1.2),
+        ]
+    )
 
     with pytest.raises(ValueError) as exc_info:
         validate_ranges(df)
