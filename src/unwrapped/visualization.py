@@ -316,3 +316,76 @@ def save_figure(fig, output_path: str | Path) -> None:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight")
+
+def plot_preference_scores(scores_df: pd.DataFrame, top_n: int = 20):
+    """
+    Horizontal bar chart of the top N tracks by preference score.
+ 
+    Designed to work directly with the DataFrame returned by
+    ``LikedSongs.predict()``, making it easy to visualize personalized
+    recommendations.
+ 
+    Parameters
+    ----------
+    scores_df : pd.DataFrame
+        Output of ``LikedSongs.predict()``. Must contain 'track_name',
+        'artists', and 'preference_score' columns.
+    top_n : int
+        Number of top-scoring tracks to display. Defaults to 20.
+ 
+    Returns
+    -------
+    fig, ax
+ 
+    Example
+    -------
+    >>> from unwrapped.io import load_tracks
+    >>> from unwrapped.preference import LikedSongs
+    >>> from unwrapped.visualization import plot_preference_scores, save_figure
+    >>>
+    >>> df = load_tracks("data/raw/spotify_data.csv")
+    >>> liked = LikedSongs(df)
+    >>> liked.add_by_name("Blinding Lights")
+    >>> scores = liked.predict(top_n=50)
+    >>> fig, ax = plot_preference_scores(scores)
+    >>> save_figure(fig, "outputs/my_recommendations.png")
+    """
+    required = ["track_name", "artists", "preference_score"]
+    missing = [c for c in required if c not in scores_df.columns]
+    if missing:
+        raise ValueError(f"scores_df is missing columns: {missing}")
+ 
+    top = (
+        scores_df
+        .nlargest(top_n, "preference_score")
+        .sort_values("preference_score")
+        .copy()
+    )
+ 
+    # Build readable labels: "Track Name — Artist"
+    top["label"] = top["track_name"].str.strip() + "  —  " + top["artists"].str.strip()
+ 
+    fig, ax = plt.subplots(figsize=(9, max(5, top_n * 0.35)))
+    bars = ax.barh(
+        top["label"],
+        top["preference_score"],
+        color="#1DB954",
+        alpha=0.85,
+    )
+ 
+    # Annotate score values at end of each bar
+    for bar, score in zip(bars, top["preference_score"]):
+        ax.text(
+            bar.get_width() + 0.005,
+            bar.get_y() + bar.get_height() / 2,
+            f"{score:.3f}",
+            va="center",
+            fontsize=8,
+        )
+ 
+    ax.set_xlim(0, top["preference_score"].max() * 1.15)
+    ax.set_xlabel("Preference Score")
+    ax.set_title(f"Top {top_n} Recommended Tracks")
+    fig.tight_layout()
+ 
+    return fig, ax
