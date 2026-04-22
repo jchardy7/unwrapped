@@ -91,6 +91,82 @@ def plot_feature_correlations(df: pd.DataFrame):
     return fig, ax
 
 
+def plot_correlation_forest(
+    df: pd.DataFrame,
+    n_bootstrap: int = 1000,
+    alpha: float = 0.05,
+    random_state: int | None = 42,
+):
+    """
+    Forest plot of each audio feature's Pearson correlation with popularity,
+    annotated with bootstrap confidence intervals and Holm-adjusted significance.
+
+    Features that remain significant after the Holm–Bonferroni correction are
+    drawn in the series color; non-significant features are drawn in grey so
+    they're visually deprioritized.
+    """
+    from .analysis import analyze_popularity_correlations
+
+    corr_df = analyze_popularity_correlations(
+        df,
+        n_bootstrap=n_bootstrap,
+        alpha=alpha,
+        random_state=random_state,
+    )
+    if corr_df.empty:
+        raise ValueError("No features available for correlation forest plot.")
+
+    # Draw strongest |r| at the top so the eye moves down-then-weaker.
+    corr_df = corr_df.sort_values("abs_correlation", ascending=True).reset_index(
+        drop=True
+    )
+
+    y_pos = np.arange(len(corr_df))
+    r = corr_df["correlation"].to_numpy()
+    lo = corr_df["ci_low"].to_numpy()
+    hi = corr_df["ci_high"].to_numpy()
+    xerr = np.vstack([r - lo, hi - r])
+
+    significant = corr_df["significant"].fillna(False).to_numpy()
+    colors = np.where(significant, "#1DB954", "#b3b3b3")
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for i in range(len(corr_df)):
+        ax.errorbar(
+            r[i],
+            y_pos[i],
+            xerr=np.array([[xerr[0, i]], [xerr[1, i]]]),
+            fmt="o",
+            color=colors[i],
+            ecolor=colors[i],
+            capsize=4,
+            markersize=6,
+            linewidth=1.5,
+        )
+
+    ax.axvline(0, color="black", linewidth=0.8)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(corr_df["feature"])
+    ax.set_xlabel("Pearson r with popularity (bootstrap 95% CI)")
+    ax.set_title(
+        f"Audio Feature Correlations with Popularity "
+        f"(Holm-adjusted α = {alpha:g})"
+    )
+
+    # Legend explaining the color split without relying on a plot artist.
+    from matplotlib.lines import Line2D
+    handles = [
+        Line2D([0], [0], marker="o", color="#1DB954", linestyle="",
+               label="significant"),
+        Line2D([0], [0], marker="o", color="#b3b3b3", linestyle="",
+               label="not significant"),
+    ]
+    ax.legend(handles=handles, loc="lower right", frameon=False)
+    fig.tight_layout()
+
+    return fig, ax
+
+
 def plot_genre_popularity(df: pd.DataFrame, top_n: int = 15):
     """
     Bar chart of mean popularity score for the top N genres by track count.
@@ -197,6 +273,41 @@ def plot_hit_vs_nonhit_profiles(df: pd.DataFrame, threshold: int = 70):
 
     return fig, ax
 
+def plot_feature_scatter(
+    df: pd.DataFrame,
+    x_feature: str = "energy",
+    y_feature: str = "danceability",
+    sample: int = 2000,
+):
+
+    for col in [x_feature, y_feature, "popularity"]:
+        if col not in df.columns:
+            raise ValueError(f"DataFrame must contain a '{col}' column.")
+ 
+    plot_df = df[[x_feature, y_feature, "popularity"]].copy()
+    for col in [x_feature, y_feature, "popularity"]:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna()
+ 
+    if len(plot_df) > sample:
+        plot_df = plot_df.sample(n=sample, random_state=42)
+ 
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sc = ax.scatter(
+        plot_df[x_feature],
+        plot_df[y_feature],
+        c=plot_df["popularity"],
+        cmap="viridis",
+        alpha=0.5,
+        s=12,
+    )
+    fig.colorbar(sc, ax=ax, label="Popularity")
+    ax.set_xlabel(x_feature.capitalize())
+    ax.set_ylabel(y_feature.capitalize())
+    ax.set_title(f"{x_feature.capitalize()} vs {y_feature.capitalize()} (colored by Popularity)")
+    fig.tight_layout()
+ 
+    return fig, ax
 
 def save_figure(fig, output_path: str | Path) -> None:
     """
@@ -220,6 +331,21 @@ def plot_tempo_by_genre(df: pd.DataFrame, top_n: int = 10):
         Cleaned Spotify tracks DataFrame.
     top_n : int
         Number of top genres (by track count) to include. Defaults to 10.
+def plot_preference_scores(scores_df: pd.DataFrame, top_n: int = 20):
+    """
+    Horizontal bar chart of the top N tracks by preference score.
+ 
+    Designed to work directly with the DataFrame returned by
+    ``LikedSongs.predict()``, making it easy to visualize personalized
+    recommendations.
+ 
+    Parameters
+    ----------
+    scores_df : pd.DataFrame
+        Output of ``LikedSongs.predict()``. Must contain 'track_name',
+        'artists', and 'preference_score' columns.
+    top_n : int
+        Number of top-scoring tracks to display. Defaults to 20.
  
     Returns
     -------
@@ -255,6 +381,56 @@ def plot_tempo_by_genre(df: pd.DataFrame, top_n: int = 10):
     ax.set_ylabel("Tempo (BPM)")
     ax.set_xlabel("Genre")
     ax.set_title(f"Tempo Distribution by Genre (Top {top_n} Genres)")
+ 
+    Example
+    -------
+    >>> from unwrapped.io import load_tracks
+    >>> from unwrapped.preference import LikedSongs
+    >>> from unwrapped.visualization import plot_preference_scores, save_figure
+    >>>
+    >>> df = load_tracks("data/raw/spotify_data.csv")
+    >>> liked = LikedSongs(df)
+    >>> liked.add_by_name("Blinding Lights")
+    >>> scores = liked.predict(top_n=50)
+    >>> fig, ax = plot_preference_scores(scores)
+    >>> save_figure(fig, "outputs/my_recommendations.png")
+    """
+    required = ["track_name", "artists", "preference_score"]
+    missing = [c for c in required if c not in scores_df.columns]
+    if missing:
+        raise ValueError(f"scores_df is missing columns: {missing}")
+ 
+    top = (
+        scores_df
+        .nlargest(top_n, "preference_score")
+        .sort_values("preference_score")
+        .copy()
+    )
+ 
+    # Build readable labels: "Track Name — Artist"
+    top["label"] = top["track_name"].str.strip() + "  —  " + top["artists"].str.strip()
+ 
+    fig, ax = plt.subplots(figsize=(9, max(5, top_n * 0.35)))
+    bars = ax.barh(
+        top["label"],
+        top["preference_score"],
+        color="#1DB954",
+        alpha=0.85,
+    )
+ 
+    # Annotate score values at end of each bar
+    for bar, score in zip(bars, top["preference_score"]):
+        ax.text(
+            bar.get_width() + 0.005,
+            bar.get_y() + bar.get_height() / 2,
+            f"{score:.3f}",
+            va="center",
+            fontsize=8,
+        )
+ 
+    ax.set_xlim(0, top["preference_score"].max() * 1.15)
+    ax.set_xlabel("Preference Score")
+    ax.set_title(f"Top {top_n} Recommended Tracks")
     fig.tight_layout()
  
     return fig, ax

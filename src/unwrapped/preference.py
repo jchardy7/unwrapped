@@ -92,7 +92,7 @@ class LikedSongs:
             )
         self.liked_ids.add(track_id)
 
-    def add_by_name(self, track_name: str, artist: str = None) -> None:
+    def add_by_name(self, track_name: str, artist: str | None = None) -> None:
         """
         Add a song to the liked list by track name (case-insensitive).
 
@@ -105,15 +105,25 @@ class LikedSongs:
             The name of the track to search for.
         artist : str, optional
             Artist name to narrow the search when there are duplicates.
+            Matched as a case-insensitive substring (not a regex), so
+            names containing ``(``, ``.``, etc. are safe.
 
         Raises
         ------
         ValueError
             If no matching track is found.
         """
-        mask = self.df["track_name"].str.lower() == track_name.lower()
+        names = self.df["track_name"].fillna("").str.lower()
+        mask = names == track_name.lower()
         if artist:
-            mask &= self.df["artists"].str.lower().str.contains(artist.lower())
+            # regex=False keeps special characters in artist names (parens,
+            # dots, plus signs) from being interpreted as regex metachars.
+            mask &= (
+                self.df["artists"]
+                .fillna("")
+                .str.lower()
+                .str.contains(artist.lower(), regex=False, na=False)
+            )
 
         matches = self.df[mask]
         if matches.empty:
@@ -206,6 +216,7 @@ class LikedSongs:
         method: ScoringMethod = "cosine",
         weights: WeightingScheme = "uniform",
         return_explanations: bool = False,
+        deduplicate: bool = True,
     ) -> pd.DataFrame:
         """
         Score every song in the dataset by similarity to the taste profile.
@@ -240,6 +251,11 @@ class LikedSongs:
         return_explanations : bool, default False
             When True, add a ``top_matches`` column summarizing the three
             features that contributed most to each track's score.
+        deduplicate : bool, default True
+            When True, collapse rows that share the same ``(track_name,
+            artists)`` pair, keeping only the highest-scoring row.  The
+            Spotify dataset stores the same song once per genre tag, so
+            a single song can otherwise dominate the top N.
 
         Returns
         -------
@@ -274,6 +290,16 @@ class LikedSongs:
         result = result.sort_values(
             "preference_score", ascending=False
         ).reset_index(drop=True)
+
+        if deduplicate:
+            # Keep the highest-scoring row for each (track_name, artists)
+            # pair. drop_duplicates keeps the first occurrence, and the
+            # frame is already sorted by score descending.
+            result = (
+                result.dropna(subset=["track_name", "artists"])
+                .drop_duplicates(subset=["track_name", "artists"])
+                .reset_index(drop=True)
+            )
 
         output_cols = [
             "track_id",

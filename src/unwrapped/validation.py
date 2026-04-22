@@ -36,6 +36,18 @@ def validate_schema(df: pd.DataFrame) -> None:
         print(f"[Warning] Extra columns detected: {extra}")
 
 
+_BOUNDED_UNIT_COLUMNS = (
+    "danceability",
+    "energy",
+    "valence",
+    "acousticness",
+    "instrumentalness",
+    "speechiness",
+)
+
+_POSITIVE_COLUMNS = ("tempo", "duration_ms")
+
+
 def validate_ranges(df: pd.DataFrame) -> None:
     errors = []
 
@@ -43,12 +55,8 @@ def validate_ranges(df: pd.DataFrame) -> None:
         if not df[col].dropna().between(low, high).all():
             errors.append(f"{col} out of range [{low}, {high}]")
 
-    check_range("danceability", 0, 1)
-    check_range("energy", 0, 1)
-    check_range("valence", 0, 1)
-    check_range("acousticness", 0, 1)
-    check_range("instrumentalness", 0, 1)
-    check_range("speechiness", 0, 1)
+    for col in _BOUNDED_UNIT_COLUMNS:
+        check_range(col, 0, 1)
 
     if (df["tempo"] <= 0).any():
         errors.append("tempo contains non-positive values")
@@ -58,6 +66,30 @@ def validate_ranges(df: pd.DataFrame) -> None:
 
     if errors:
         raise ValueError("Range validation failed:\n" + "\n".join(errors))
+
+
+def range_violation_counts(df: pd.DataFrame) -> dict[str, int]:
+    """Count out-of-range values per column without raising.
+
+    Parallels :func:`validate_ranges` but returns per-column counts so the
+    validation entrypoint can report on real-world datasets that contain
+    a handful of dirty rows (e.g. ``tempo == 0``) without aborting.
+    """
+    counts: dict[str, int] = {}
+
+    for col in _BOUNDED_UNIT_COLUMNS:
+        if col not in df.columns:
+            continue
+        series = df[col].dropna()
+        counts[col] = int((~series.between(0, 1)).sum())
+
+    for col in _POSITIVE_COLUMNS:
+        if col not in df.columns:
+            continue
+        series = df[col].dropna()
+        counts[col] = int((series <= 0).sum())
+
+    return counts
 
 
 def validate_duplicates(df: pd.DataFrame) -> dict:
@@ -100,6 +132,7 @@ def validation_report(df: pd.DataFrame) -> dict:
     report.update(validate_duplicates(df))
     report["unique_tracks"] = int(df["track_id"].nunique())
     report["inconsistent_tracks"] = validate_track_consistency(df)
+    report["range_violations"] = range_violation_counts(df)
 
     return report
 
@@ -110,7 +143,6 @@ def run_validation(path: str):
     df = load_data(path)
 
     validate_schema(df)
-    validate_ranges(df)
     validate_correlations(df)
 
     report = validation_report(df)

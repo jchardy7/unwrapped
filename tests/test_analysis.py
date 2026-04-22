@@ -10,6 +10,7 @@ import pytest
 
 from unwrapped.analysis import (
     AUDIO_FEATURES,
+    _holm_bonferroni,
     analyze_popularity_correlations,
     compare_genres,
     compute_genre_deviations,
@@ -232,6 +233,110 @@ class TestAnalyzePopularityCorrelations:
 
         valid = {"strong", "moderate", "weak", "very weak"}
         assert set(result["strength"]).issubset(valid)
+
+    def test_inference_columns_are_present(self) -> None:
+        result = analyze_popularity_correlations(make_df(), n_bootstrap=100)
+
+        for col in (
+            "ci_low",
+            "ci_high",
+            "p_value",
+            "p_value_adjusted",
+            "significant",
+            "n",
+        ):
+            assert col in result.columns
+
+    def test_confidence_interval_brackets_the_point_estimate(self) -> None:
+        result = analyze_popularity_correlations(
+            make_df(), n_bootstrap=200, random_state=0
+        )
+
+        for _, row in result.iterrows():
+            assert row["ci_low"] <= row["correlation"] <= row["ci_high"]
+
+    def test_bootstrap_disabled_returns_nan_ci(self) -> None:
+        result = analyze_popularity_correlations(make_df(), n_bootstrap=0)
+
+        assert result["ci_low"].isna().all()
+        assert result["ci_high"].isna().all()
+        # p-values come from scipy, not the bootstrap, so they should still exist.
+        assert result["p_value"].notna().all()
+
+    def test_holm_adjusted_pvalues_are_not_smaller_than_raw(self) -> None:
+        result = analyze_popularity_correlations(make_df(), n_bootstrap=50)
+
+        assert (
+            result["p_value_adjusted"].fillna(0) >= result["p_value"].fillna(0)
+        ).all()
+        assert (result["p_value_adjusted"].dropna() <= 1.0).all()
+
+    def test_significance_flag_follows_alpha_threshold(self) -> None:
+        result = analyze_popularity_correlations(
+            make_df(), n_bootstrap=50, alpha=0.01
+        )
+
+        assert (
+            result["significant"] == (result["p_value_adjusted"] < 0.01)
+        ).all()
+
+    def test_alpha_controls_ci_width(self) -> None:
+        narrow = analyze_popularity_correlations(
+            make_df(), n_bootstrap=400, alpha=0.20, random_state=1
+        )
+        wide = analyze_popularity_correlations(
+            make_df(), n_bootstrap=400, alpha=0.01, random_state=1
+        )
+
+        narrow_width = (narrow["ci_high"] - narrow["ci_low"]).mean()
+        wide_width = (wide["ci_high"] - wide["ci_low"]).mean()
+
+        # A larger (1 - alpha) coverage should produce a wider interval on
+        # average.
+        assert wide_width >= narrow_width
+
+    def test_random_state_makes_ci_deterministic(self) -> None:
+        first = analyze_popularity_correlations(
+            make_df(), n_bootstrap=100, random_state=7
+        )
+        second = analyze_popularity_correlations(
+            make_df(), n_bootstrap=100, random_state=7
+        )
+
+        np.testing.assert_array_equal(
+            first["ci_low"].to_numpy(), second["ci_low"].to_numpy()
+        )
+        np.testing.assert_array_equal(
+            first["ci_high"].to_numpy(), second["ci_high"].to_numpy()
+        )
+
+
+class TestHolmBonferroni:
+    def test_textbook_example(self) -> None:
+        """Worked example: Holm on four p-values with a known adjustment."""
+        raw = np.array([0.01, 0.04, 0.03, 0.005])
+        adjusted = _holm_bonferroni(raw)
+
+        # Sorted ascending: [0.005, 0.01, 0.03, 0.04] with factors [4,3,2,1]
+        # -> [0.02, 0.03, 0.06, 0.04] -> monotone [0.02, 0.03, 0.06, 0.06].
+        # Unsort to original order: [0.03, 0.06, 0.06, 0.02].
+        expected = np.array([0.03, 0.06, 0.06, 0.02])
+        np.testing.assert_allclose(adjusted, expected, atol=1e-12)
+
+    def test_caps_at_one(self) -> None:
+        adjusted = _holm_bonferroni(np.array([0.5, 0.8, 0.9]))
+
+        assert (adjusted <= 1.0).all()
+
+    def test_preserves_nan(self) -> None:
+        adjusted = _holm_bonferroni(np.array([0.01, np.nan, 0.2]))
+
+        # The NaN entry stays NaN and does not count toward the family size.
+        assert np.isnan(adjusted[1])
+        # The remaining two are the family m = 2.
+        np.testing.assert_allclose(
+            adjusted[[0, 2]], np.array([0.02, 0.2]), atol=1e-12
+        )
 
 
 # ------------------------------------------------------------------
