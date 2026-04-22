@@ -4,6 +4,7 @@ from unwrapped.clean import clean_data
 from unwrapped.io import load_data
 from unwrapped.visualization import (
     plot_audio_heatmap,
+    plot_correlation_forest,
     plot_feature_correlations,
     plot_genre_popularity,
     plot_hit_vs_nonhit_profiles,
@@ -33,6 +34,10 @@ def main() -> None:
     fig3, _ = plot_feature_correlations(df)
     save_figure(fig3, output_dir / "feature_correlations.png")
     print("Saved outputs/feature_correlations.png")
+
+    fig3b, _ = plot_correlation_forest(df)
+    save_figure(fig3b, output_dir / "feature_correlations_forest.png")
+    print("Saved outputs/feature_correlations_forest.png")
 
     fig4, _ = plot_genre_popularity(df, top_n=15)
     save_figure(fig4, output_dir / "genre_popularity.png")

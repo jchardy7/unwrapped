@@ -51,7 +51,20 @@ def main():
     )
 
     corr = results["correlations"]
-    print(corr[["feature", "correlation", "strength"]].to_string(index=False))
+
+    display = corr.copy()
+    display["95% CI"] = display.apply(
+        lambda row: f"[{row['ci_low']:+.3f}, {row['ci_high']:+.3f}]", axis=1
+    )
+    display["p (Holm)"] = display["p_value_adjusted"].map(
+        lambda p: "<1e-4" if p < 1e-4 else f"{p:.4f}"
+    )
+    display["sig"] = display["significant"].map(lambda s: "✓" if s else "·")
+    print(
+        display[
+            ["feature", "correlation", "95% CI", "p (Holm)", "sig", "strength"]
+        ].to_string(index=False)
+    )
 
     top = corr.iloc[0]
     second = corr.iloc[1]
@@ -60,9 +73,19 @@ def main():
     print(f"\nFindings:")
     print(
         f"  The strongest predictor of popularity is {top['feature']} "
-        f"(r = {top['correlation']:+.4f}, {top['strength']}), followed by "
+        f"(r = {top['correlation']:+.4f}, 95% CI "
+        f"[{top['ci_low']:+.3f}, {top['ci_high']:+.3f}], "
+        f"Holm-adj. p = "
+        f"{'<1e-4' if top['p_value_adjusted'] < 1e-4 else f'{top['p_value_adjusted']:.4f}'}"
+        f"), followed by "
         f"{second['feature']} (r = {second['correlation']:+.4f}) and "
         f"{third['feature']} (r = {third['correlation']:+.4f})."
+    )
+
+    n_significant = int(corr["significant"].sum())
+    print(
+        f"  {n_significant} of {len(corr)} features stay significant "
+        f"after Holm–Bonferroni correction."
     )
 
     # Check direction patterns
