@@ -91,6 +91,82 @@ def plot_feature_correlations(df: pd.DataFrame):
     return fig, ax
 
 
+def plot_correlation_forest(
+    df: pd.DataFrame,
+    n_bootstrap: int = 1000,
+    alpha: float = 0.05,
+    random_state: int | None = 42,
+):
+    """
+    Forest plot of each audio feature's Pearson correlation with popularity,
+    annotated with bootstrap confidence intervals and Holm-adjusted significance.
+
+    Features that remain significant after the Holm–Bonferroni correction are
+    drawn in the series color; non-significant features are drawn in grey so
+    they're visually deprioritized.
+    """
+    from .analysis import analyze_popularity_correlations
+
+    corr_df = analyze_popularity_correlations(
+        df,
+        n_bootstrap=n_bootstrap,
+        alpha=alpha,
+        random_state=random_state,
+    )
+    if corr_df.empty:
+        raise ValueError("No features available for correlation forest plot.")
+
+    # Draw strongest |r| at the top so the eye moves down-then-weaker.
+    corr_df = corr_df.sort_values("abs_correlation", ascending=True).reset_index(
+        drop=True
+    )
+
+    y_pos = np.arange(len(corr_df))
+    r = corr_df["correlation"].to_numpy()
+    lo = corr_df["ci_low"].to_numpy()
+    hi = corr_df["ci_high"].to_numpy()
+    xerr = np.vstack([r - lo, hi - r])
+
+    significant = corr_df["significant"].fillna(False).to_numpy()
+    colors = np.where(significant, "#1DB954", "#b3b3b3")
+
+    fig, ax = plt.subplots(figsize=(9, 5))
+    for i in range(len(corr_df)):
+        ax.errorbar(
+            r[i],
+            y_pos[i],
+            xerr=np.array([[xerr[0, i]], [xerr[1, i]]]),
+            fmt="o",
+            color=colors[i],
+            ecolor=colors[i],
+            capsize=4,
+            markersize=6,
+            linewidth=1.5,
+        )
+
+    ax.axvline(0, color="black", linewidth=0.8)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(corr_df["feature"])
+    ax.set_xlabel("Pearson r with popularity (bootstrap 95% CI)")
+    ax.set_title(
+        f"Audio Feature Correlations with Popularity "
+        f"(Holm-adjusted α = {alpha:g})"
+    )
+
+    # Legend explaining the color split without relying on a plot artist.
+    from matplotlib.lines import Line2D
+    handles = [
+        Line2D([0], [0], marker="o", color="#1DB954", linestyle="",
+               label="significant"),
+        Line2D([0], [0], marker="o", color="#b3b3b3", linestyle="",
+               label="not significant"),
+    ]
+    ax.legend(handles=handles, loc="lower right", frameon=False)
+    fig.tight_layout()
+
+    return fig, ax
+
+
 def plot_genre_popularity(df: pd.DataFrame, top_n: int = 15):
     """
     Bar chart of mean popularity score for the top N genres by track count.

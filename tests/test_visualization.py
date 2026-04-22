@@ -9,6 +9,7 @@ import pytest
 
 from unwrapped.visualization import (
     plot_audio_heatmap,
+    plot_correlation_forest,
     plot_feature_correlations,
     plot_genre_popularity,
     plot_hit_vs_nonhit_profiles,
@@ -88,6 +89,14 @@ def test_plot_feature_correlations_raises_on_missing_column():
     df = pd.DataFrame({"popularity": [90, 80]})
     with pytest.raises(ValueError, match="missing columns"):
         plot_feature_correlations(df)
+
+
+def test_plot_correlation_forest_runs():
+    fig, ax = plot_correlation_forest(
+        _sample_df(), n_bootstrap=50, random_state=0
+    )
+    assert fig is not None
+    assert ax is not None
 
 
 def test_plot_genre_popularity_runs():
