@@ -205,3 +205,56 @@ def save_figure(fig, output_path: str | Path) -> None:
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(output_path, bbox_inches="tight")
+
+
+def plot_tempo_by_genre(df: pd.DataFrame, top_n: int = 10):
+    """
+    Box plot of tempo distribution across the top N genres by track count.
+ 
+    Uses GroupBy aggregation to pull tempo values per genre, giving a clear
+    picture of which genres are fast- vs slow-paced.
+ 
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Cleaned Spotify tracks DataFrame.
+    top_n : int
+        Number of top genres (by track count) to include. Defaults to 10.
+ 
+    Returns
+    -------
+    fig, ax
+    """
+    for col in ["track_genre", "tempo"]:
+        if col not in df.columns:
+            raise ValueError(f"DataFrame must contain a '{col}' column.")
+ 
+    tmp = df[["track_genre", "tempo"]].copy()
+    tmp["tempo"] = pd.to_numeric(tmp["tempo"], errors="coerce")
+    tmp = tmp.dropna(subset=["tempo", "track_genre"])
+ 
+    top_genres = tmp["track_genre"].value_counts().head(top_n).index.tolist()
+    tmp = tmp[tmp["track_genre"].isin(top_genres)]
+ 
+    # Use GroupBy to build ordered list of tempo arrays for boxplot
+    grouped = tmp.groupby("track_genre")["tempo"].apply(list)
+    means = tmp.groupby("track_genre")["tempo"].mean()
+    ordered = means.reindex(top_genres).sort_values(ascending=False).index.tolist()
+    data = [grouped[g] for g in ordered]
+ 
+    fig, ax = plt.subplots(figsize=(10, 5))
+    bp = ax.boxplot(data, patch_artist=True, vert=True)
+ 
+    colors = plt.cm.coolwarm(np.linspace(0, 1, len(ordered)))
+    for patch, color in zip(bp["boxes"], colors):
+        patch.set_facecolor(color)
+        patch.set_alpha(0.8)
+ 
+    ax.set_xticks(range(1, len(ordered) + 1))
+    ax.set_xticklabels(ordered, rotation=45, ha="right")
+    ax.set_ylabel("Tempo (BPM)")
+    ax.set_xlabel("Genre")
+    ax.set_title(f"Tempo Distribution by Genre (Top {top_n} Genres)")
+    fig.tight_layout()
+ 
+    return fig, ax
