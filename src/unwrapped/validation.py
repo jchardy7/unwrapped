@@ -43,6 +43,7 @@ _BOUNDED_UNIT_COLUMNS = (
     "acousticness",
     "instrumentalness",
     "speechiness",
+    "liveness"
 )
 
 _POSITIVE_COLUMNS = ("tempo", "duration_ms")
