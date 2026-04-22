@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 
 from .constants import AUDIO_FEATURES
 from .io import load_data
@@ -164,37 +165,134 @@ def find_genre_outliers(
 # ---------------------------------------------------------------------------
 
 
-def analyze_popularity_correlations(df: pd.DataFrame) -> pd.DataFrame:
+def _bootstrap_correlation_ci(
+    x: np.ndarray,
+    y: np.ndarray,
+    n_bootstrap: int,
+    alpha: float,
+    rng: np.random.Generator,
+) -> tuple[float, float]:
+    """Percentile-bootstrap confidence interval for Pearson r.
+
+    Resamples (x, y) pairs with replacement ``n_bootstrap`` times and
+    returns the central ``1 - alpha`` interval of the resampled r values.
+    Returns ``(nan, nan)`` when ``n_bootstrap`` is zero or every resample
+    degenerates (e.g. a constant feature).
+    """
+    if n_bootstrap <= 0:
+        return float("nan"), float("nan")
+
+    n = len(x)
+    samples = np.empty(n_bootstrap, dtype=float)
+    for i in range(n_bootstrap):
+        idx = rng.integers(0, n, size=n)
+        xb = x[idx]
+        yb = y[idx]
+        # Skip resamples where one side is constant; corrcoef would warn
+        # and return NaN, which nanpercentile handles downstream.
+        if xb.std() == 0 or yb.std() == 0:
+            samples[i] = np.nan
+        else:
+            samples[i] = np.corrcoef(xb, yb)[0, 1]
+
+    if np.all(np.isnan(samples)):
+        return float("nan"), float("nan")
+
+    lower = float(np.nanpercentile(samples, 100 * alpha / 2))
+    upper = float(np.nanpercentile(samples, 100 * (1 - alpha / 2)))
+    return lower, upper
+
+
+def _holm_bonferroni(p_values: np.ndarray) -> np.ndarray:
+    """Holm step-down adjustment for a family of p-values.
+
+    Returns adjusted p-values in the same order as the input. NaN inputs
+    are left as NaN and excluded from the correction (they don't count
+    toward the family size).
+    """
+    p = np.asarray(p_values, dtype=float)
+    adjusted = np.full_like(p, np.nan)
+    tested_mask = ~np.isnan(p)
+    tested = p[tested_mask]
+
+    if tested.size == 0:
+        return adjusted
+
+    order = np.argsort(tested)
+    ranked = tested[order]
+    factors = np.arange(tested.size, 0, -1)  # m, m-1, ..., 1
+    raw = ranked * factors
+    monotone = np.maximum.accumulate(raw)
+    capped = np.minimum(monotone, 1.0)
+
+    back = np.empty_like(tested)
+    back[order] = capped
+    adjusted[tested_mask] = back
+    return adjusted
+
+
+def analyze_popularity_correlations(
+    df: pd.DataFrame,
+    n_bootstrap: int = 1000,
+    alpha: float = 0.05,
+    random_state: int | None = 42,
+) -> pd.DataFrame:
     """Compute Pearson correlations between each audio feature and popularity.
 
-    Uses ``np.corrcoef`` and classifies each correlation by strength.
+    Each correlation is reported with a two-sided p-value, a percentile
+    bootstrap confidence interval, a Holm–Bonferroni-adjusted p-value
+    to account for testing nine features simultaneously, and a strength
+    label for quick scanning.
 
     Parameters
     ----------
     df : pd.DataFrame
         Spotify dataset with ``popularity`` and audio feature columns.
+    n_bootstrap : int, default 1000
+        Bootstrap resamples used to build the confidence interval. Set
+        to ``0`` to skip the bootstrap (``ci_low``/``ci_high`` become NaN).
+    alpha : float, default 0.05
+        Significance level. Controls both the CI width (``1 - alpha``)
+        and the ``significant`` column after Holm adjustment.
+    random_state : int or None, default 42
+        Seed for the bootstrap resampler. ``None`` uses fresh entropy.
 
     Returns
     -------
     pd.DataFrame
-        One row per feature with correlation value, absolute value,
-        direction, and strength label.  Sorted by absolute correlation
-        descending.
+        One row per feature with columns ``feature``, ``correlation``,
+        ``abs_correlation``, ``direction``, ``strength``, ``ci_low``,
+        ``ci_high``, ``p_value``, ``p_value_adjusted``, ``significant``.
+        Sorted by absolute correlation descending.
     """
 
     popularity = df["popularity"].values.astype(float)
-    results = []
+    rng = np.random.default_rng(random_state)
+    rows: list[dict[str, object]] = []
 
     for feature in AUDIO_FEATURES:
         feature_vals = df[feature].values.astype(float)
 
-        # Drop rows where either value is NaN
         valid = ~(np.isnan(popularity) | np.isnan(feature_vals))
-        if np.sum(valid) < 2:
+        if np.sum(valid) < 3:
             continue
 
-        corr = np.corrcoef(popularity[valid], feature_vals[valid])[0, 1]
+        x = popularity[valid]
+        y = feature_vals[valid]
+
+        # Skip constant columns: scipy.stats.pearsonr would warn and
+        # return NaN, and the bootstrap CI would be meaningless.
+        if x.std() == 0 or y.std() == 0:
+            continue
+
+        pearson = stats.pearsonr(x, y)
+        corr = float(pearson.statistic)
+        p_value = float(pearson.pvalue)
         abs_corr = float(np.abs(corr))
+
+        ci_low, ci_high = _bootstrap_correlation_ci(
+            x, y, n_bootstrap=n_bootstrap, alpha=alpha, rng=rng
+        )
 
         if abs_corr >= 0.7:
             strength = "strong"
@@ -205,15 +303,33 @@ def analyze_popularity_correlations(df: pd.DataFrame) -> pd.DataFrame:
         else:
             strength = "very weak"
 
-        results.append({
+        rows.append({
             "feature": feature,
-            "correlation": round(float(corr), 4),
+            "correlation": round(corr, 4),
             "abs_correlation": round(abs_corr, 4),
             "direction": "positive" if corr > 0 else "negative",
             "strength": strength,
+            "ci_low": round(ci_low, 4) if not np.isnan(ci_low) else np.nan,
+            "ci_high": round(ci_high, 4) if not np.isnan(ci_high) else np.nan,
+            "p_value": p_value,
+            "n": int(valid.sum()),
         })
 
-    result_df = pd.DataFrame(results)
+    if not rows:
+        return pd.DataFrame(
+            columns=[
+                "feature", "correlation", "abs_correlation", "direction",
+                "strength", "ci_low", "ci_high", "p_value",
+                "p_value_adjusted", "significant", "n",
+            ]
+        )
+
+    result_df = pd.DataFrame(rows)
+
+    adjusted = _holm_bonferroni(result_df["p_value"].to_numpy())
+    result_df["p_value_adjusted"] = adjusted
+    result_df["significant"] = result_df["p_value_adjusted"] < alpha
+
     return result_df.sort_values(
         "abs_correlation", ascending=False
     ).reset_index(drop=True)
