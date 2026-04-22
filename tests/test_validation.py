@@ -189,7 +189,7 @@ def test_range_violation_counts_reports_per_column_without_raising() -> None:
         [
             make_valid_row(track_id="track-1"),
             make_valid_row(track_id="track-2", tempo=0, duration_ms=0),
-            make_valid_row(track_id="track-3", danceability=1.5, energy=-0.1),
+            make_valid_row(track_id="track-3", danceability=1.5, energy=-0.1, liveness=1.5),
         ]
     )
 
@@ -201,6 +201,7 @@ def test_range_violation_counts_reports_per_column_without_raising() -> None:
     assert counts["energy"] == 1
     # Clean columns should report zero — not be missing from the dict.
     assert counts["valence"] == 0
+    assert counts["liveness"] == 1
 
 
 def test_run_validation_reports_range_violations_without_raising(
