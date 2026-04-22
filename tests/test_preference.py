@@ -87,6 +87,29 @@ class TestAddSongs:
         with pytest.raises(ValueError, match="No track named"):
             liked.add_by_name("Nonexistent Song")
 
+    def test_add_by_name_handles_regex_metacharacters_in_artist(self) -> None:
+        """Artist names with regex metachars must be matched as literal substrings."""
+        df = make_df().copy()
+        df.loc[df["track_id"] == "t2", "artists"] = "Some Band (Live)"
+        liked = LikedSongs(df)
+
+        # An unbalanced "(" in a regex would raise a PatternError;
+        # using it as a literal substring is the correct behavior.
+        liked.add_by_name("Song B", artist="(Live)")
+
+        assert "t2" in liked.liked_ids
+
+    def test_add_by_name_handles_nan_in_name_and_artist_columns(self) -> None:
+        """Missing text values must not break the fuzzy match."""
+        df = make_df().copy()
+        df.loc[df["track_id"] == "t1", "track_name"] = None
+        df.loc[df["track_id"] == "t1", "artists"] = None
+        liked = LikedSongs(df)
+
+        liked.add_by_name("Song B", artist="Artist B")
+
+        assert "t2" in liked.liked_ids
+
     def test_remove(self) -> None:
         liked = LikedSongs(make_df())
         liked.add_by_id("t1")
@@ -203,6 +226,43 @@ class TestPredict:
         expected_cols = ["track_id", "track_name", "artists", "track_genre",
                          "popularity", "preference_score"]
         assert list(scores.columns) == expected_cols
+
+    def test_predict_deduplicates_same_song_across_genres(self) -> None:
+        """The Spotify dataset stores one row per (song, genre); dedupe by default."""
+        df = pd.DataFrame([
+            make_row(track_id="t1", track_name="Song A", artists="Artist A",
+                     danceability=0.3, energy=0.4, tempo=100.0),
+            # Same song tagged under two genres — distinct track_ids.
+            make_row(track_id="t2a", track_name="Hit", artists="Star",
+                     track_genre="pop", danceability=0.7, energy=0.9, tempo=140.0),
+            make_row(track_id="t2b", track_name="Hit", artists="Star",
+                     track_genre="dance", danceability=0.7, energy=0.9, tempo=140.0),
+        ])
+        liked = LikedSongs(df)
+        liked.add_by_id("t1")
+
+        scores = liked.predict()
+
+        hit_rows = scores[scores["track_name"] == "Hit"]
+        assert len(hit_rows) == 1
+
+    def test_predict_keeps_duplicates_when_disabled(self) -> None:
+        """`deduplicate=False` preserves one row per track_id."""
+        df = pd.DataFrame([
+            make_row(track_id="t1", track_name="Song A", artists="Artist A",
+                     danceability=0.3, energy=0.4, tempo=100.0),
+            make_row(track_id="t2a", track_name="Hit", artists="Star",
+                     track_genre="pop", danceability=0.7, energy=0.9, tempo=140.0),
+            make_row(track_id="t2b", track_name="Hit", artists="Star",
+                     track_genre="dance", danceability=0.7, energy=0.9, tempo=140.0),
+        ])
+        liked = LikedSongs(df)
+        liked.add_by_id("t1")
+
+        scores = liked.predict(deduplicate=False)
+
+        hit_rows = scores[scores["track_name"] == "Hit"]
+        assert len(hit_rows) == 2
 
 
 class TestBuildProfile:
