@@ -197,6 +197,41 @@ def plot_hit_vs_nonhit_profiles(df: pd.DataFrame, threshold: int = 70):
 
     return fig, ax
 
+def plot_feature_scatter(
+    df: pd.DataFrame,
+    x_feature: str = "energy",
+    y_feature: str = "danceability",
+    sample: int = 2000,
+):
+
+    for col in [x_feature, y_feature, "popularity"]:
+        if col not in df.columns:
+            raise ValueError(f"DataFrame must contain a '{col}' column.")
+ 
+    plot_df = df[[x_feature, y_feature, "popularity"]].copy()
+    for col in [x_feature, y_feature, "popularity"]:
+        plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+    plot_df = plot_df.dropna()
+ 
+    if len(plot_df) > sample:
+        plot_df = plot_df.sample(n=sample, random_state=42)
+ 
+    fig, ax = plt.subplots(figsize=(8, 6))
+    sc = ax.scatter(
+        plot_df[x_feature],
+        plot_df[y_feature],
+        c=plot_df["popularity"],
+        cmap="viridis",
+        alpha=0.5,
+        s=12,
+    )
+    fig.colorbar(sc, ax=ax, label="Popularity")
+    ax.set_xlabel(x_feature.capitalize())
+    ax.set_ylabel(y_feature.capitalize())
+    ax.set_title(f"{x_feature.capitalize()} vs {y_feature.capitalize()} (colored by Popularity)")
+    fig.tight_layout()
+ 
+    return fig, ax
 
 def save_figure(fig, output_path: str | Path) -> None:
     """
