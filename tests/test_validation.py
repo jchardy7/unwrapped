@@ -13,6 +13,7 @@ import pytest
 
 from unwrapped.validation import EXPECTED_COLUMNS
 from unwrapped.validation import missing_summary
+from unwrapped.validation import range_violation_counts
 from unwrapped.validation import run_validation
 from unwrapped.validation import validate_correlations
 from unwrapped.validation import validate_duplicates
@@ -179,6 +180,46 @@ def test_validate_ranges_rejects_non_missing_out_of_range_values() -> None:
         validate_ranges(df)
 
     assert "energy out of range [0, 1]" in str(exc_info.value)
+
+
+def test_range_violation_counts_reports_per_column_without_raising() -> None:
+    """Soft range reporting should count dirty rows instead of aborting."""
+
+    df = pd.DataFrame(
+        [
+            make_valid_row(track_id="track-1"),
+            make_valid_row(track_id="track-2", tempo=0, duration_ms=0),
+            make_valid_row(track_id="track-3", danceability=1.5, energy=-0.1),
+        ]
+    )
+
+    counts = range_violation_counts(df)
+
+    assert counts["tempo"] == 1
+    assert counts["duration_ms"] == 1
+    assert counts["danceability"] == 1
+    assert counts["energy"] == 1
+    # Clean columns should report zero — not be missing from the dict.
+    assert counts["valence"] == 0
+
+
+def test_run_validation_reports_range_violations_without_raising(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`run_validation` must not abort when the raw data has dirty rows."""
+
+    df = pd.DataFrame(
+        [
+            make_valid_row(track_id="track-1"),
+            make_valid_row(track_id="track-2", tempo=0),
+        ]
+    )
+
+    monkeypatch.setattr("unwrapped.io.load_data", lambda _path: df)
+
+    _, report = run_validation("fake/path.csv")
+
+    assert report["range_violations"]["tempo"] == 1
 
 
 def test_validate_duplicates_counts_both_row_and_track_id_duplicates() -> None:
