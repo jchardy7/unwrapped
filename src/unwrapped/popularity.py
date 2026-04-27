@@ -23,6 +23,16 @@ from .io import load_data
 
 DEFAULT_OUTPUT_DIR = "outputs"
 
+RF_PARAMS: dict = {
+    "n_estimators": 300,
+    "max_depth": None,
+    "max_features": "sqrt",
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "random_state": 42,
+    "n_jobs": 1,
+}
+
 REQUIRED_COLUMNS: list[str] = [
     "popularity",
     "track_genre",
@@ -162,15 +172,7 @@ def train_random_forest(
     X_train: pd.DataFrame, y_train: pd.Series
 ) -> RandomForestRegressor:
     """Fit a tuned random forest regressor on the training set."""
-    model = RandomForestRegressor(
-        n_estimators=300,
-        max_depth=None,
-        max_features="sqrt",
-        min_samples_split=2,
-        min_samples_leaf=1,
-        random_state=42,
-        n_jobs=1,
-    )
+    model = RandomForestRegressor(**RF_PARAMS)
     model.fit(X_train, y_train)
     return model
 
@@ -432,15 +434,7 @@ def run_popularity_pipeline(
     )
 
     rf_cv = cross_validate_model(
-        RandomForestRegressor(
-            n_estimators=300,
-            max_depth=None,
-            max_features="sqrt",
-            min_samples_split=2,
-            min_samples_leaf=1,
-            random_state=42,
-            n_jobs=-1,
-        ),
+        RandomForestRegressor(**RF_PARAMS),
         X_train,
         y_train,
     )
