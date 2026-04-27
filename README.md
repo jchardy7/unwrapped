@@ -154,11 +154,27 @@ the data merging, numpy computation, and statistical analysis come together.
 
 ## Model Comparison (Group 3)
 
-We evaluated three models to predict Spotify track popularity:
+We developed a predictive modeling pipeline to estimate Spotify track popularity using audio features. The goal was to evaluate how well different machine learning models can capture relationships between song characteristics and popularity.
 
-- Linear Regression  
-- Random Forest  
-- CatBoost  
+### Approach
+
+We used a consistent feature set across all models, including key audio attributes such as danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo, and duration. Genre was included as a categorical feature when available.
+
+The modeling pipeline included:
+- Data cleaning and filtering (removing missing values and invalid entries)
+- Train/test split (80/20)
+- Feature preprocessing:
+  - Standardization for linear models
+  - One-hot encoding for categorical features
+- Model training and evaluation using RMSE, MAE, and R²
+
+### Models Evaluated
+
+We compared three models:
+
+- **Linear Regression** — baseline model for interpreting linear relationships  
+- **Random Forest** — ensemble model to capture nonlinear interactions  
+- **CatBoost** — gradient boosting model that handles categorical features efficiently and captures complex patterns  
 
 ### Results
 
@@ -168,15 +184,26 @@ We evaluated three models to predict Spotify track popularity:
 | Linear Regression  | 12.680 | 8.944 | 0.507 |
 | Random Forest      | 15.122 | 11.708 | 0.300 |
 
-CatBoost performed best, but only slightly better than linear regression.
+CatBoost performed best, but only marginally outperformed linear regression.
 
-This suggests that **audio features have mostly linear relationships with popularity**, and that **external factors (like marketing, artist popularity, and trends) likely explain the remaining variation**.
+### Interpretation
 
----
+The similar performance between CatBoost and Linear Regression suggests that the relationship between audio features and popularity is largely linear. The relatively low R² (~0.5) indicates that a significant portion of popularity cannot be explained by audio features alone.
+
+This highlights an important limitation of the dataset: external factors such as marketing, artist popularity, playlist placement, and social trends likely play a major role in determining song popularity.
 
 ### Visualization
 
 ![Actual vs Predicted Popularity](outputs/group3_actual_vs_predicted.png)
+
+The plot shows a clear positive relationship between actual and predicted values, indicating that the model captures general trends. However, predictions are compressed and exhibit substantial variance, especially for highly popular tracks, suggesting difficulty in modeling extreme values.
+
+### Running the Model Comparison
+
+To reproduce these results:
+
+```bash
+python scripts/group3_model_comparison.py
 
 ### Popularity Modeling (`popularity.py`)
 
