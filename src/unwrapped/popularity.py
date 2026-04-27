@@ -370,10 +370,47 @@ def run_popularity_pipeline(
     df = load_data(data_path)
 
     validate_data(df)
-    df = handle_missing_values(df)
-    df = preprocess_data(df)
 
-    X_train, X_test, y_train, y_test = split_data(df)
+    # --- Step 1: Drop rows missing target ---
+    df = df.dropna(subset=["popularity"]).copy()
+
+    # --- Step 2: Split BEFORE imputation ---
+    X = df.drop(columns=["popularity"])
+    y = df["popularity"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # --- Step 3: Handle categorical missing values ---
+    X_train["track_genre"] = X_train["track_genre"].fillna("unknown")
+    X_test["track_genre"] = X_test["track_genre"].fillna("unknown")
+
+    # --- Step 4: Impute numeric columns using TRAINING medians ---
+    numeric_cols = X_train.select_dtypes(include=["number"]).columns
+
+    for col in numeric_cols:
+        train_median = X_train[col].median()
+        X_train[col] = X_train[col].fillna(train_median)
+        X_test[col] = X_test[col].fillna(train_median)
+
+    # --- Step 5: Recombine with target for preprocessing ---
+    train_df = pd.concat([X_train, y_train], axis=1)
+    test_df = pd.concat([X_test, y_test], axis=1)
+
+    # --- Step 6: One-hot encode separately ---
+    train_df = preprocess_data(train_df)
+    test_df = preprocess_data(test_df)
+
+    # --- Step 7: Split again into X/y ---
+    X_train = train_df.drop(columns=["popularity"])
+    y_train = train_df["popularity"]
+
+    X_test = test_df.drop(columns=["popularity"])
+    y_test = test_df["popularity"]
+
+    # --- Step 8: Align columns (IMPORTANT for dummies) ---
+    X_test = X_test.reindex(columns=X_train.columns, fill_value=0)
 
     linear_model = train_linear_model(X_train, y_train)
     linear_results = evaluate_model(
