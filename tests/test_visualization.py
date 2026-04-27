@@ -10,6 +10,7 @@ import pytest
 from unwrapped.visualization import (
     plot_actual_vs_predicted,
     plot_audio_heatmap,
+    plot_feature_violin_by_genre,
     plot_correlation_forest,
     plot_feature_correlations,
     plot_genre_popularity,
@@ -134,6 +135,33 @@ def test_plot_hit_vs_nonhit_profiles_raises_on_missing_column():
     df = pd.DataFrame({"popularity": [90, 80]})
     with pytest.raises(ValueError, match="missing columns"):
         plot_hit_vs_nonhit_profiles(df)
+
+
+def test_plot_feature_violin_by_genre_runs():
+    fig, ax = plot_feature_violin_by_genre(_sample_df(), feature="danceability", top_n=3)
+
+    assert fig is not None
+    assert ax is not None
+
+
+def test_plot_feature_violin_by_genre_raises_on_missing_feature_column():
+    df = pd.DataFrame({"track_genre": ["pop", "rock", "jazz"]})
+
+    with pytest.raises(ValueError, match="danceability"):
+        plot_feature_violin_by_genre(df, feature="danceability")
+
+
+def test_plot_feature_violin_by_genre_raises_on_missing_genre_column():
+    df = pd.DataFrame({"danceability": [0.5, 0.6, 0.7]})
+
+    with pytest.raises(ValueError, match="track_genre"):
+        plot_feature_violin_by_genre(df, feature="danceability")
+
+
+def test_plot_feature_violin_by_genre_ylabel_matches_feature():
+    fig, ax = plot_feature_violin_by_genre(_sample_df(), feature="energy", top_n=3)
+
+    assert ax.get_ylabel() == "Energy"
 
 
 def test_plot_actual_vs_predicted_runs():

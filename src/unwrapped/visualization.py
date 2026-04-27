@@ -355,6 +355,61 @@ def plot_feature_scatter(
     return fig, ax
 
 
+def plot_feature_violin_by_genre(
+    df: pd.DataFrame,
+    feature: str = "danceability",
+    top_n: int = 10,
+):
+    """
+    Violin plot of an audio feature's distribution across the top N genres
+    by track count. More informative than a box plot — shows the full
+    distribution shape, including bimodality and spread.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Cleaned Spotify tracks DataFrame.
+    feature : str
+        Audio feature column to plot. Defaults to ``"danceability"``.
+    top_n : int
+        Number of top genres (by track count) to include. Defaults to 10.
+
+    Returns
+    -------
+    fig, ax
+    """
+    for col in ["track_genre", feature]:
+        if col not in df.columns:
+            raise ValueError(f"DataFrame must contain a '{col}' column.")
+
+    tmp = df[["track_genre", feature]].copy()
+    tmp[feature] = pd.to_numeric(tmp[feature], errors="coerce")
+    tmp = tmp.dropna(subset=[feature, "track_genre"])
+
+    top_genres = tmp["track_genre"].value_counts().head(top_n).index.tolist()
+    tmp = tmp[tmp["track_genre"].isin(top_genres)]
+
+    means = tmp.groupby("track_genre")[feature].mean()
+    ordered = means.reindex(top_genres).sort_values(ascending=False).index.tolist()
+    data = [tmp[tmp["track_genre"] == g][feature].values for g in ordered]
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    parts = ax.violinplot(data, positions=range(len(ordered)), showmedians=True)
+
+    for pc in parts["bodies"]:
+        pc.set_facecolor("#1DB954")
+        pc.set_alpha(0.7)
+
+    ax.set_xticks(range(len(ordered)))
+    ax.set_xticklabels(ordered, rotation=45, ha="right")
+    ax.set_ylabel(feature.capitalize())
+    ax.set_xlabel("Genre")
+    ax.set_title(f"{feature.capitalize()} Distribution by Genre (Top {top_n} Genres)")
+    fig.tight_layout()
+
+    return fig, ax
+
+
 def plot_actual_vs_predicted(predictions_df: pd.DataFrame):
     """
     Two-panel scatter plot of actual vs. predicted popularity for the linear
