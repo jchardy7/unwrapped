@@ -71,7 +71,8 @@ def validate_data(df: pd.DataFrame) -> None:
             f"Missing required columns: {', '.join(missing_columns)}"
         )
 
-
+# NOTE: Retained for testing and modular use.
+# Not used in run_popularity_pipeline to avoid data leakage.
 def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     """Drop rows without a popularity target and impute the rest.
 
@@ -416,54 +417,62 @@ def run_popularity_pipeline(
 
     linear_model = train_linear_model(X_train, y_train)
     linear_results = evaluate_model(
-        linear_model,
-        X_test,
-        y_test,
-        "Linear Regression",
-    )
+            linear_model,
+            X_test,
+            y_test,
+            "Linear Regression",
+        )
 
     linear_cv = cross_validate_model(LinearRegression(), X_train, y_train)
     linear_results.update(linear_cv)
 
     random_forest_model = train_random_forest(X_train, y_train)
     rf_results = evaluate_model(
-        random_forest_model,
-        X_test,
-        y_test,
-        "Random Forest",
-    )
+            random_forest_model,
+            X_test,
+            y_test,
+            "Random Forest",
+        )
 
     rf_cv = cross_validate_model(
-        RandomForestRegressor(**RF_PARAMS),
-        X_train,
-        y_train,
-    )
+            RandomForestRegressor(
+                n_estimators=300,
+                max_depth=None,
+                max_features="sqrt",
+                min_samples_split=2,
+                min_samples_leaf=1,
+                random_state=42,
+                n_jobs=-1,
+            ),
+            X_train,
+            y_train,
+        )
     rf_results.update(rf_cv)
 
     comparison_df = compare_models([linear_results, rf_results])
     feature_importance_df = get_feature_importance(random_forest_model, X_train)
 
     test_predictions = pd.DataFrame({
-        "actual_popularity": y_test.values,
-        "linear_prediction": linear_model.predict(X_test),
-        "random_forest_prediction": random_forest_model.predict(X_test),
-    })
+            "actual_popularity": y_test.values,
+            "linear_prediction": linear_model.predict(X_test),
+            "random_forest_prediction": random_forest_model.predict(X_test),
+        })
 
     if save_results:
-        save_outputs(
-            comparison_df,
-            feature_importance_df,
-            test_predictions,
-            output_dir=output_dir,
-        )
+            save_outputs(
+                comparison_df,
+                feature_importance_df,
+                test_predictions,
+                output_dir=output_dir,
+            )
 
     return {
-        "linear_model": linear_model,
-        "random_forest_model": random_forest_model,
-        "comparison": comparison_df,
-        "feature_importance": feature_importance_df,
-        "predictions": test_predictions,
-    }
+            "linear_model": linear_model,
+            "random_forest_model": random_forest_model,
+            "comparison": comparison_df,
+            "feature_importance": feature_importance_df,
+            "predictions": test_predictions,
+        }
 
 
 import sys
