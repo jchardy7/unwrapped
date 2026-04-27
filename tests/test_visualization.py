@@ -10,6 +10,7 @@ import pytest
 from unwrapped.visualization import (
     plot_actual_vs_predicted,
     plot_audio_heatmap,
+    plot_feature_importance,
     plot_feature_violin_by_genre,
     plot_correlation_forest,
     plot_feature_correlations,
@@ -135,6 +136,35 @@ def test_plot_hit_vs_nonhit_profiles_raises_on_missing_column():
     df = pd.DataFrame({"popularity": [90, 80]})
     with pytest.raises(ValueError, match="missing columns"):
         plot_hit_vs_nonhit_profiles(df)
+
+
+def _importance_df():
+    return pd.DataFrame(
+        {
+            "feature": ["danceability", "energy", "tempo", "loudness", "valence"],
+            "importance": [0.30, 0.25, 0.20, 0.15, 0.10],
+        }
+    )
+
+
+def test_plot_feature_importance_runs():
+    fig, ax = plot_feature_importance(_importance_df(), top_n=3)
+
+    assert fig is not None
+    assert ax is not None
+
+
+def test_plot_feature_importance_raises_on_missing_column():
+    df = pd.DataFrame({"feature": ["danceability", "energy"]})
+
+    with pytest.raises(ValueError, match="missing columns"):
+        plot_feature_importance(df)
+
+
+def test_plot_feature_importance_xlabel():
+    _, ax = plot_feature_importance(_importance_df(), top_n=3)
+
+    assert ax.get_xlabel() == "Feature Importance"
 
 
 def test_plot_feature_violin_by_genre_runs():
