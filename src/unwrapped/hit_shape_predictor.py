@@ -55,22 +55,9 @@ REQUIRED_COLUMNS = [
 ]
 
 
-AUDIO_FEATURE_COLUMNS = [
-    "duration_ms",
-    "explicit",
-    "danceability",
-    "energy",
-    "key",
-    "loudness",
-    "mode",
-    "speechiness",
-    "acousticness",
-    "instrumentalness",
-    "liveness",
-    "valence",
-    "tempo",
-    "time_signature",
-]
+from unwrapped.constants import AUDIO_FEATURES_FOR_HIT_CLASSIFICATION
+
+AUDIO_FEATURE_COLUMNS = AUDIO_FEATURES_FOR_HIT_CLASSIFICATION
 
 
 def validate_data(df):
