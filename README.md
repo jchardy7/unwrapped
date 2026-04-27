@@ -52,12 +52,15 @@ python scripts/demo_cleaning.py       # See what the cleaning pipeline does
 python scripts/demo_validation.py     # Run data quality checks
 python scripts/demo_summary.py        # Print descriptive statistics
 python scripts/demo_visualization.py  # Generate charts (saved to outputs/)
+python scripts/demo_hit_shape.py       # Hit-shape prediction demo
 ```
 
 ## Running Tests
 
+Run the full test suite:
+
 ```bash
-pytest
+python -m pytest
 ```
 
 Tests are in the `tests/` directory. They use small hand-built DataFrames so
@@ -74,7 +77,8 @@ unwrapped/
 │   ├── demo_json_loading.py  # JSON loading demo
 │   ├── demo_summary.py     # Descriptive statistics demo
 │   ├── demo_validation.py  # Data quality checks demo
-│   └── demo_visualization.py  # Chart generation
+│   ├── demo_visualization.py  # Chart generation
+│   └── demo_hit_shape.py       # Hit-shape prediction demo (classification model)
 ├── group3_model_comparison.py  # Compares Linear Regression, Random Forest, and CatBoost
 ├── src/unwrapped/          # Package source code
 │   ├── io.py               # CSV and JSON loading
@@ -83,6 +87,8 @@ unwrapped/
 │   ├── summary.py          # Descriptive statistics / EDA
 │   ├── analysis.py         # Research question analysis
 │   ├── popularity.py       # Popularity prediction models
+│   ├── hit_shape_predictor.py   # Hit vs. non-hit classification model
+│   ├── feature_impact.py        # Simulates how feature changes affect predictions
 │   ├── preference.py       # Song recommendation tool
 │   └── visualization.py    # Chart generation
 ├── tests/                  # Unit tests for each module
@@ -212,10 +218,33 @@ This script trains all three models, prints evaluation metrics (RMSE, MAE, R²),
 
 Trains regression models to predict track popularity from audio features:
 
-- Validates and preprocesses the data
-- Trains Linear Regression, Random Forest, and CatBoost models
-- Evaluates models with RMSE, MAE, and R-squared
-- Saves an actual vs predicted visualization for the best model
+- Validates required Spotify columns and handles missing values
+- Preprocesses data by removing identifiers and encoding genre features
+- Trains Linear Regression and Random Forest models
+- Evaluates models using RMSE, MAE, R², and cross-validation
+- Reports Random Forest feature importance
+- Saves model comparison, feature importance, and prediction outputs as CSV files
+
+The module can be run with the default dataset:
+
+```bash
+python -m unwrapped.popularity
+python -m unwrapped.popularity data/raw/spotify_data.csv
+```
+
+## Hit Shape Predictor (`hit_shape_predictor.py`)
+
+The Hit Shape Predictor identifies whether a song resembles the audio profile of a hit song. It defines hit songs using a popularity threshold, builds average audio-feature profiles for hit and non-hit tracks, computes distance-based similarity features using NumPy, trains Logistic Regression and Random Forest classifiers, and evaluates models using accuracy, precision, recall, and F1.
+
+This module helps answer: “What does the shape of a hit song look like compared to a non-hit song?”
+
+## Feature Impact Analyzer (`feature_impact.py`)
+
+The Feature Impact Analyzer extends the popularity model by running counterfactual-style prediction scenarios. It trains a Random Forest popularity model, selects a test-set song, applies feature-change scenarios such as increasing danceability, energy, or valence, and measures the change in predicted popularity.
+
+It calculates original prediction, modified prediction, absolute change, and percent change using NumPy. It also clips bounded audio features to valid 0–1 ranges and saves results to `outputs/feature_impact_results.csv`.
+
+These results are model-based simulations, not causal claims.
 
 ### Preference Scoring (`preference.py`)
 
