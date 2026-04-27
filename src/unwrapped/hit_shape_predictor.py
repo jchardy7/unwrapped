@@ -20,6 +20,22 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from .io import load_data
 
 
+RF_PARAMS: dict = {
+    "n_estimators": 300,
+    "max_depth": None,
+    "max_features": "sqrt",
+    "min_samples_split": 2,
+    "min_samples_leaf": 1,
+    "random_state": 42,
+    "n_jobs": -1,
+}
+
+LR_PARAMS: dict = {
+    "max_iter": 1000,
+    "random_state": 42,
+    "class_weight": "balanced",
+}
+
 REQUIRED_COLUMNS = [
     "popularity",
     "duration_ms",
@@ -233,26 +249,14 @@ def split_data(df, test_size=0.2, random_state=42):
 
 def train_logistic_model(X_train, y_train):
     """Train a logistic regression classifier."""
-    model = LogisticRegression(
-        max_iter=1000,
-        random_state=42,
-        class_weight="balanced"
-    )
+    model = LogisticRegression(**LR_PARAMS)
     model.fit(X_train, y_train)
     return model
 
 
 def train_random_forest(X_train, y_train):
     """Train a random forest classifier."""
-    model = RandomForestClassifier(
-        n_estimators=300,
-        max_depth=None,
-        max_features="sqrt",
-        min_samples_split=2,
-        min_samples_leaf=1,
-        random_state=42,
-        n_jobs=-1
-    )
+    model = RandomForestClassifier(**RF_PARAMS)
     model.fit(X_train, y_train)
     return model
 
@@ -405,11 +409,7 @@ def run_hit_shape_pipeline(
     )
     logistic_results.update(
         cross_validate_model(
-            LogisticRegression(
-                max_iter=1000,
-                random_state=42,
-                class_weight="balanced"
-            ),
+            LogisticRegression(**LR_PARAMS),
             X_train,
             y_train
         )
@@ -424,15 +424,7 @@ def run_hit_shape_pipeline(
     )
     rf_results.update(
         cross_validate_model(
-            RandomForestClassifier(
-                n_estimators=300,
-                max_depth=None,
-                max_features="sqrt",
-                min_samples_split=2,
-                min_samples_leaf=1,
-                random_state=42,
-                n_jobs=-1
-            ),
+            RandomForestClassifier(**RF_PARAMS),
             X_train,
             y_train
         )
