@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import argparse
 
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
@@ -434,18 +435,29 @@ def run_popularity_pipeline(
     }
 
 
-def main() -> None:
-    data_path = "data/raw/spotify_data.csv"
+import sys
+
+def main(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(
+        description="Run the Spotify popularity prediction pipeline."
+    )
+    parser.add_argument(
+        "data_path",
+        nargs="?",
+        default="data/raw/spotify_data.csv",
+        help="Path to the Spotify dataset CSV.",
+    )
+
+    args = parser.parse_args(argv if argv is not None else [])
+
     try:
-        run_popularity_pipeline(data_path)
+        run_popularity_pipeline(args.data_path)
     except FileNotFoundError:
         print(
-            f"Error: data file not found at '{data_path}'.\n"
-            "Make sure you are running this script from the repository root\n"
-            "and that the Spotify dataset has been placed at data/raw/spotify_data.csv."
+            f"Error: data file not found at '{args.data_path}'.\n"
+            "Provide a valid dataset path as a command-line argument or place "
+            "the dataset in data/raw/spotify_data.csv."
         )
         raise SystemExit(1)
-
-
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1:])
