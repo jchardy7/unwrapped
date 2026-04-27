@@ -1,0 +1,4 @@
+model,rmse,mae,r2
+CatBoost,12.679,9.234,0.508
+Linear Regression,12.68,8.944,0.507
+Random Forest,15.122,11.708,0.3
