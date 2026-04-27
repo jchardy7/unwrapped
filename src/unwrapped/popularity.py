@@ -168,7 +168,7 @@ def train_random_forest(
         min_samples_split=2,
         min_samples_leaf=1,
         random_state=42,
-        n_jobs=-1,
+        n_jobs=1,
     )
     model.fit(X_train, y_train)
     return model
@@ -243,7 +243,7 @@ def cross_validate_model(
         y_train,
         cv=cv,
         scoring="neg_root_mean_squared_error",
-        n_jobs=-1,
+        n_jobs=1,
     )
 
     r2_scores = cross_val_score(
@@ -252,7 +252,7 @@ def cross_validate_model(
         y_train,
         cv=cv,
         scoring="r2",
-        n_jobs=-1,
+        n_jobs=1,
     )
 
     cv_rmse_mean = -neg_rmse_scores.mean()
