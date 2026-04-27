@@ -355,6 +355,46 @@ def plot_feature_scatter(
     return fig, ax
 
 
+def plot_feature_importance(importance_df: pd.DataFrame, top_n: int = 10):
+    """
+    Horizontal bar chart of the top N feature importances from the random
+    forest popularity model.
+
+    Designed to work directly with the DataFrame returned by
+    ``get_feature_importance()``, which contains ``feature`` and
+    ``importance`` columns.
+
+    Parameters
+    ----------
+    importance_df : pd.DataFrame
+        Feature importance data with ``feature`` and ``importance`` columns.
+    top_n : int
+        Number of top features to display. Defaults to 10.
+
+    Returns
+    -------
+    fig, ax
+    """
+    required = ["feature", "importance"]
+    missing = [c for c in required if c not in importance_df.columns]
+    if missing:
+        raise ValueError(f"importance_df is missing columns: {missing}")
+
+    top = (
+        importance_df
+        .nlargest(top_n, "importance")
+        .sort_values("importance")
+    )
+
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.barh(top["feature"], top["importance"], color="#1DB954", alpha=0.85)
+    ax.set_xlabel("Feature Importance")
+    ax.set_title(f"Top {top_n} Feature Importances (Random Forest)")
+    fig.tight_layout()
+
+    return fig, ax
+
+
 def plot_feature_violin_by_genre(
     df: pd.DataFrame,
     feature: str = "danceability",
