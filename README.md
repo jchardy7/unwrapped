@@ -75,6 +75,7 @@ unwrapped/
 │   ├── demo_summary.py     # Descriptive statistics demo
 │   ├── demo_validation.py  # Data quality checks demo
 │   └── demo_visualization.py  # Chart generation
+├── group3_model_comparison.py  # Compares Linear Regression, Random Forest, and CatBoost
 ├── src/unwrapped/          # Package source code
 │   ├── io.py               # CSV and JSON loading
 │   ├── clean.py            # Data cleaning pipeline
@@ -181,11 +182,10 @@ This suggests that **audio features have mostly linear relationships with popula
 
 Trains regression models to predict track popularity from audio features:
 
-1. Validates and preprocesses the data (median imputation, one-hot encoding)
-2. Trains a baseline linear regression and a random forest
-3. Evaluates both with RMSE, MAE, R-squared, and 5-fold cross-validation
-4. Reports feature importances from the random forest
-5. Optionally saves results as CSV files
+- Validates and preprocesses the data
+- Trains Linear Regression, Random Forest, and CatBoost models
+- Evaluates models with RMSE, MAE, and R-squared
+- Saves an actual vs predicted visualization for the best model
 
 ### Preference Scoring (`preference.py`)
 
