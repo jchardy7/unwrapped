@@ -17,19 +17,9 @@ from .clean import BOUNDED_AUDIO_COLUMNS, NUMERIC_COLUMNS, TEXT_COLUMNS
 
 DEFAULT_OUTPUT_DIR = "outputs"
 
-AUDIO_FEATURE_COLUMNS = [
-    "danceability",
-    "energy",
-    "speechiness",
-    "acousticness",
-    "instrumentalness",
-    "liveness",
-    "valence",
-    "loudness",
-    "tempo",
-    "duration_ms",
-]
+from unwrapped.constants import AUDIO_FEATURES_WITH_DURATION
 
+AUDIO_FEATURE_COLUMNS = AUDIO_FEATURES_WITH_DURATION
 CATEGORICAL_COLUMNS = ["track_genre", "artists", "explicit"]
 
 
