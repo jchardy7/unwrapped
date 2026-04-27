@@ -205,6 +205,8 @@ To reproduce these results:
 ```bash
 python scripts/group3_model_comparison.py
 
+This script trains all three models, prints evaluation metrics (RMSE, MAE, R²), saves results to `outputs/model_results.csv`, and generates the visualization in `outputs/`.
+
 ### Popularity Modeling (`popularity.py`)
 
 Trains regression models to predict track popularity from audio features:
