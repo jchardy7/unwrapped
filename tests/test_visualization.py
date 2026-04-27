@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from unwrapped.visualization import (
+    plot_actual_vs_predicted,
     plot_audio_heatmap,
     plot_correlation_forest,
     plot_feature_correlations,
@@ -133,6 +134,48 @@ def test_plot_hit_vs_nonhit_profiles_raises_on_missing_column():
     df = pd.DataFrame({"popularity": [90, 80]})
     with pytest.raises(ValueError, match="missing columns"):
         plot_hit_vs_nonhit_profiles(df)
+
+
+def test_plot_actual_vs_predicted_runs():
+    predictions_df = pd.DataFrame(
+        {
+            "actual_popularity": [80, 60, 70, 50, 90, 40, 75, 55],
+            "linear_prediction": [75.0, 65.0, 72.0, 48.0, 88.0, 42.0, 74.0, 58.0],
+            "random_forest_prediction": [78.0, 62.0, 71.0, 52.0, 87.0, 38.0, 76.0, 54.0],
+        }
+    )
+
+    fig, axes = plot_actual_vs_predicted(predictions_df)
+
+    assert fig is not None
+    assert len(axes) == 2
+
+
+def test_plot_actual_vs_predicted_raises_on_missing_column():
+    df = pd.DataFrame(
+        {
+            "actual_popularity": [80, 60],
+            "linear_prediction": [75.0, 65.0],
+        }
+    )
+
+    with pytest.raises(ValueError, match="missing columns"):
+        plot_actual_vs_predicted(df)
+
+
+def test_plot_actual_vs_predicted_titles_contain_r2():
+    predictions_df = pd.DataFrame(
+        {
+            "actual_popularity": [80, 60, 70, 50, 90],
+            "linear_prediction": [75.0, 65.0, 72.0, 48.0, 88.0],
+            "random_forest_prediction": [78.0, 62.0, 71.0, 52.0, 87.0],
+        }
+    )
+
+    _, axes = plot_actual_vs_predicted(predictions_df)
+
+    for ax in axes:
+        assert "R²" in ax.get_title()
 
 
 def test_save_figure_writes_file_and_creates_parent_dirs(tmp_path: Path):

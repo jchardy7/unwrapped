@@ -355,6 +355,57 @@ def plot_feature_scatter(
     return fig, ax
 
 
+def plot_actual_vs_predicted(predictions_df: pd.DataFrame):
+    """
+    Two-panel scatter plot of actual vs. predicted popularity for the linear
+    regression and random forest models.
+
+    Designed to work directly with the ``predictions`` DataFrame returned by
+    ``run_popularity_pipeline()``, which contains ``actual_popularity``,
+    ``linear_prediction``, and ``random_forest_prediction`` columns.
+
+    Returns
+    -------
+    fig, axes
+        ``axes`` is a list of two Axes objects, one per model.
+    """
+    required = ["actual_popularity", "linear_prediction", "random_forest_prediction"]
+    missing = [c for c in required if c not in predictions_df.columns]
+    if missing:
+        raise ValueError(f"predictions_df is missing columns: {missing}")
+
+    actual = pd.to_numeric(predictions_df["actual_popularity"], errors="coerce")
+    linear = pd.to_numeric(predictions_df["linear_prediction"], errors="coerce")
+    rf = pd.to_numeric(predictions_df["random_forest_prediction"], errors="coerce")
+
+    mask = actual.notna() & linear.notna() & rf.notna()
+    actual, linear, rf = actual[mask], linear[mask], rf[mask]
+
+    ss_tot = float(((actual - actual.mean()) ** 2).sum())
+    lr_r2 = 1 - float(((actual - linear) ** 2).sum()) / ss_tot if ss_tot > 0 else float("nan")
+    rf_r2 = 1 - float(((actual - rf) ** 2).sum()) / ss_tot if ss_tot > 0 else float("nan")
+
+    lo, hi = float(actual.min()), float(actual.max())
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+
+    for ax, pred, name, r2, color in [
+        (axes[0], linear, "Linear Regression", lr_r2, "#5cae5c"),
+        (axes[1], rf, "Random Forest", rf_r2, "#1DB954"),
+    ]:
+        ax.scatter(actual, pred, alpha=0.3, s=10, color=color)
+        ax.plot([lo, hi], [lo, hi], "k--", linewidth=1, label="perfect fit")
+        ax.set_xlabel("Actual Popularity")
+        ax.set_ylabel("Predicted Popularity")
+        ax.set_title(f"{name}\n(R² = {r2:.3f})")
+        ax.legend(fontsize=8, frameon=False)
+
+    fig.suptitle("Actual vs. Predicted Popularity", y=1.02)
+    fig.tight_layout()
+
+    return fig, axes
+
+
 def save_figure(fig, output_path: str | Path) -> None:
     """
     Save a matplotlib figure to disk, creating parent directories if needed.
