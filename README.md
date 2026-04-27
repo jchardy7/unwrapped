@@ -151,6 +151,32 @@ the data merging, numpy computation, and statistical analysis come together.
 - **Feature bucket analysis**: Splits features into equal-width bins using
   `np.linspace()` to reveal non-linear popularity patterns.
 
+## Model Comparison (Group 3)
+
+We evaluated three models to predict Spotify track popularity:
+
+- Linear Regression  
+- Random Forest  
+- CatBoost  
+
+### Results
+
+| Model              | RMSE  | MAE  | R²   |
+|--------------------|------|------|------|
+| CatBoost           | 12.679 | 9.234 | 0.508 |
+| Linear Regression  | 12.680 | 8.944 | 0.507 |
+| Random Forest      | 15.122 | 11.708 | 0.300 |
+
+CatBoost performed best, but only slightly better than linear regression.
+
+This suggests that **audio features have mostly linear relationships with popularity**, and that **external factors (like marketing, artist popularity, and trends) likely explain the remaining variation**.
+
+---
+
+### Visualization
+
+![Actual vs Predicted Popularity](outputs/group3_actual_vs_predicted.png)
+
 ### Popularity Modeling (`popularity.py`)
 
 Trains regression models to predict track popularity from audio features:
