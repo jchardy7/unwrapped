@@ -61,7 +61,8 @@ def validate_data(df: pd.DataFrame) -> None:
             f"Missing required columns: {', '.join(missing_columns)}"
         )
 
-
+# NOTE: Retained for testing and modular use.
+# Not used in run_popularity_pipeline to avoid data leakage.
 def handle_missing_values(df: pd.DataFrame) -> pd.DataFrame:
     """Drop rows without a popularity target and impute the rest.
 
