@@ -21,6 +21,8 @@ model track popularity, and recommend songs based on listening preferences.
    z-scores, we identified tracks whose audio features don't match their
    genre's typical profile.
 
+See [FINDINGS.md](FINDINGS.md) for our full analysis results and interpretation.
+
 ## Setup
 
 Clone the repo and install in editable mode:
