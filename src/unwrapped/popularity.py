@@ -16,7 +16,7 @@ import argparse
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import cross_val_score, train_test_split
+from sklearn.model_selection import RandomizedSearchCV, cross_val_score, train_test_split
 
 from .io import load_data
 
@@ -31,6 +31,13 @@ RF_PARAMS: dict = {
     "min_samples_leaf": 1,
     "random_state": 42,
     "n_jobs": 1,
+}
+
+DEFAULT_RF_PARAM_DISTRIBUTIONS: dict = {
+    "n_estimators": [100, 200, 300, 500],
+    "max_depth": [None, 10, 20, 30],
+    "min_samples_split": [2, 5, 10],
+    "max_features": ["sqrt", "log2"],
 }
 
 REQUIRED_COLUMNS: list[str] = [
@@ -176,6 +183,74 @@ def train_random_forest(
     model = RandomForestRegressor(**RF_PARAMS)
     model.fit(X_train, y_train)
     return model
+
+
+def tune_random_forest(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    param_distributions: dict | None = None,
+    cv: int = 5,
+    n_iter: int = 20,
+    scoring: str = "neg_root_mean_squared_error",
+    random_state: int = 42,
+) -> dict[str, Any]:
+    """Tune a ``RandomForestRegressor`` with ``RandomizedSearchCV``.
+
+    Parameters
+    ----------
+    X_train, y_train :
+        Training features and target.
+    param_distributions : dict, optional
+        Mapping of hyperparameter names to value lists. Defaults to
+        :data:`DEFAULT_RF_PARAM_DISTRIBUTIONS`.
+    cv : int, default 5
+        Number of cross-validation folds.
+    n_iter : int, default 20
+        Candidates sampled from ``param_distributions``.
+    scoring : str, default ``"neg_root_mean_squared_error"``
+        Scoring metric forwarded to ``RandomizedSearchCV``.
+    random_state : int, default 42
+        Seed used both for the base estimator and the parameter sampler.
+
+    Returns
+    -------
+    dict
+        ``best_estimator`` (refit on the full training set), ``best_params``,
+        ``best_score`` (mean CV score, larger-is-better), and ``cv_results``
+        (DataFrame with one row per sampled candidate).
+    """
+    if param_distributions is None:
+        param_distributions = DEFAULT_RF_PARAM_DISTRIBUTIONS
+
+    base_model = RandomForestRegressor(random_state=random_state, n_jobs=1)
+
+    search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=param_distributions,
+        n_iter=n_iter,
+        cv=cv,
+        scoring=scoring,
+        random_state=random_state,
+        n_jobs=1,
+        refit=True,
+    )
+    search.fit(X_train, y_train)
+
+    cv_results = pd.DataFrame(
+        {
+            "params": search.cv_results_["params"],
+            "mean_test_score": search.cv_results_["mean_test_score"],
+            "std_test_score": search.cv_results_["std_test_score"],
+            "rank_test_score": search.cv_results_["rank_test_score"],
+        }
+    ).sort_values("rank_test_score").reset_index(drop=True)
+
+    return {
+        "best_estimator": search.best_estimator_,
+        "best_params": search.best_params_,
+        "best_score": float(search.best_score_),
+        "cv_results": cv_results,
+    }
 
 
 def evaluate_model(

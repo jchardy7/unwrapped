@@ -15,7 +15,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import RandomizedSearchCV, train_test_split, cross_val_score
 
 from .io import load_data
 
@@ -34,6 +34,20 @@ LR_PARAMS: dict = {
     "max_iter": 1000,
     "random_state": 42,
     "class_weight": "balanced",
+}
+
+DEFAULT_RF_CLF_PARAM_DISTRIBUTIONS: dict = {
+    "n_estimators": [100, 200, 300, 500],
+    "max_depth": [None, 10, 20, 30],
+    "min_samples_split": [2, 5, 10],
+    "max_features": ["sqrt", "log2"],
+}
+
+THRESHOLD_METRIC_FUNCS = {
+    "accuracy": accuracy_score,
+    "precision": lambda y, p: precision_score(y, p, zero_division=0),
+    "recall": lambda y, p: recall_score(y, p, zero_division=0),
+    "f1": lambda y, p: f1_score(y, p, zero_division=0),
 }
 
 REQUIRED_COLUMNS = [
@@ -246,6 +260,129 @@ def train_random_forest(X_train, y_train):
     model = RandomForestClassifier(**RF_PARAMS)
     model.fit(X_train, y_train)
     return model
+
+
+def tune_random_forest_classifier(
+    X_train,
+    y_train,
+    param_distributions=None,
+    cv=5,
+    n_iter=20,
+    scoring="f1",
+    random_state=42,
+):
+    """Tune ``RandomForestClassifier`` hyperparameters with ``RandomizedSearchCV``.
+
+    Returns a dict with ``best_estimator``, ``best_params``, ``best_score``
+    (mean CV score, larger-is-better), and ``cv_results`` (DataFrame ranked
+    best-first).
+    """
+    if param_distributions is None:
+        param_distributions = DEFAULT_RF_CLF_PARAM_DISTRIBUTIONS
+
+    base_model = RandomForestClassifier(
+        random_state=random_state, n_jobs=1, class_weight="balanced"
+    )
+
+    search = RandomizedSearchCV(
+        estimator=base_model,
+        param_distributions=param_distributions,
+        n_iter=n_iter,
+        cv=cv,
+        scoring=scoring,
+        random_state=random_state,
+        n_jobs=1,
+        refit=True,
+    )
+    search.fit(X_train, y_train)
+
+    cv_results = pd.DataFrame(
+        {
+            "params": search.cv_results_["params"],
+            "mean_test_score": search.cv_results_["mean_test_score"],
+            "std_test_score": search.cv_results_["std_test_score"],
+            "rank_test_score": search.cv_results_["rank_test_score"],
+        }
+    ).sort_values("rank_test_score").reset_index(drop=True)
+
+    return {
+        "best_estimator": search.best_estimator_,
+        "best_params": search.best_params_,
+        "best_score": float(search.best_score_),
+        "cv_results": cv_results,
+    }
+
+
+def predict_with_threshold(model, X, threshold):
+    """Return 0/1 predictions using a custom probability cutoff.
+
+    Uses ``model.predict_proba(X)[:, 1] >= threshold``. The 1-class column is
+    selected so the threshold is interpretable as P(hit).
+    """
+    if not hasattr(model, "predict_proba"):
+        raise TypeError("Model must implement predict_proba for threshold tuning.")
+
+    probabilities = model.predict_proba(X)[:, 1]
+    return (probabilities >= threshold).astype(int)
+
+
+def compute_threshold_curve(model, X_val, y_val, thresholds=None):
+    """Sweep decision thresholds and report classification metrics at each.
+
+    Returns a DataFrame with columns ``threshold, accuracy, precision,
+    recall, f1`` ordered by ascending threshold. When ``thresholds`` is
+    ``None``, sweeps ``np.linspace(0.05, 0.95, 91)``.
+    """
+    if thresholds is None:
+        thresholds = np.linspace(0.05, 0.95, 91)
+    thresholds = np.asarray(thresholds, dtype=float)
+
+    probabilities = model.predict_proba(X_val)[:, 1]
+    y_val_arr = np.asarray(y_val)
+
+    rows = []
+    for t in thresholds:
+        preds = (probabilities >= t).astype(int)
+        rows.append(
+            {
+                "threshold": float(t),
+                "accuracy": accuracy_score(y_val_arr, preds),
+                "precision": precision_score(y_val_arr, preds, zero_division=0),
+                "recall": recall_score(y_val_arr, preds, zero_division=0),
+                "f1": f1_score(y_val_arr, preds, zero_division=0),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def find_optimal_threshold(model, X_val, y_val, metric="f1", thresholds=None):
+    """Pick the probability threshold that maximizes ``metric``.
+
+    Parameters
+    ----------
+    metric : {"f1", "accuracy", "precision", "recall"}, default "f1"
+        Column from :func:`compute_threshold_curve` to optimize.
+
+    Returns
+    -------
+    dict
+        ``best_threshold``, ``best_score``, ``metric``, and the full ``curve``.
+    """
+    if metric not in THRESHOLD_METRIC_FUNCS:
+        raise ValueError(
+            f"Unknown metric '{metric}'. Choose from {sorted(THRESHOLD_METRIC_FUNCS)}."
+        )
+
+    curve = compute_threshold_curve(model, X_val, y_val, thresholds=thresholds)
+    best_row = curve.iloc[curve[metric].idxmax()]
+
+    return {
+        "best_threshold": float(best_row["threshold"]),
+        "best_score": float(best_row[metric]),
+        "metric": metric,
+        "curve": curve,
+    }
 
 
 def evaluate_model(model, X_test, y_test, model_name="Model"):
