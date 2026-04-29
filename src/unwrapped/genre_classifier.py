@@ -30,7 +30,7 @@ RF_PARAMS: dict = {
     "n_estimators": 300,
     "max_features": "sqrt",
     "random_state": 42,
-    "n_jobs": -1,
+    "n_jobs": 1,
     "class_weight": "balanced",
 }
 

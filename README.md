@@ -71,7 +71,7 @@ To see test coverage:
 python -m pytest --cov=src/unwrapped --cov-report=term-missing
 ```
 
-**Current test coverage: 94%** across 271 tests. Per-module coverage:
+**Current test coverage: 94%** across 319 tests. Per-module coverage:
 
 | Module | Coverage |
 |---|---|
@@ -102,6 +102,7 @@ unwrapped/
 │   ├── demo_json_loading.py  # JSON loading demo
 │   ├── demo_summary.py     # Descriptive statistics demo
 │   ├── demo_validation.py  # Data quality checks demo
+│   ├── demo_preference.py      # Recommendation demo
 │   ├── demo_visualization.py  # Chart generation
 │   └── demo_hit_shape.py       # Hit-shape prediction demo (classification model)
 ├── group3_model_comparison.py  # Compares Linear Regression, Random Forest, and CatBoost
@@ -115,6 +116,8 @@ unwrapped/
 │   ├── hit_shape_predictor.py   # Hit vs. non-hit classification model
 │   ├── feature_impact.py        # Simulates how feature changes affect predictions
 │   ├── preference.py       # Song recommendation tool
+│   ├── genre_classifier.py     # Predicts track genre from audio features
+│   ├── clustering.py           # Clusters songs by audio profile
 │   └── visualization.py    # Chart generation
 ├── tests/                  # Unit tests for each module
 ├── pyproject.toml          # Package config and dependencies
@@ -270,6 +273,14 @@ The Feature Impact Analyzer extends the popularity model by running counterfactu
 It calculates original prediction, modified prediction, absolute change, and percent change using NumPy. It also clips bounded audio features to valid 0–1 ranges and saves results to `outputs/feature_impact_results.csv`.
 
 These results are model-based simulations, not causal claims.
+
+### Genre Classifier (`genre_classifier.py`)
+
+Predicts track genre from audio features using Logistic Regression and Random Forest classifiers. Reports accuracy, macro F1, weighted F1, top-k accuracy, and confusion matrix outputs.
+
+### Clustering (`clustering.py`)
+
+Groups tracks by audio profile using KMeans clustering. Includes utilities to search for a reasonable number of clusters, attach cluster labels, inspect centroids, and summarize each cluster by popularity and genre.
 
 ### Preference Scoring (`preference.py`)
 
