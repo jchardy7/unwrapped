@@ -65,6 +65,29 @@ Run the full test suite:
 python -m pytest
 ```
 
+To see test coverage:
+
+```bash
+python -m pytest --cov=src/unwrapped --cov-report=term-missing
+```
+
+**Current test coverage: 94%** across 271 tests. Per-module coverage:
+
+| Module | Coverage |
+|---|---|
+| `__init__.py` | 100% |
+| `constants.py` | 100% |
+| `popularity.py` | 99% |
+| `visualization.py` | 99% |
+| `summary.py` | 98% |
+| `clean.py` | 97% |
+| `preference.py` | 97% |
+| `validation.py` | 97% |
+| `analysis.py` | 93% |
+| `io.py` | 83% |
+| `feature_impact.py` | 82% |
+| `hit_shape_predictor.py` | 75% |
+
 Tests are in the `tests/` directory. They use small hand-built DataFrames so
 they run fast and don't need the real CSV file.
 
