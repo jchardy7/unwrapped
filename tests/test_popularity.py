@@ -7,6 +7,7 @@ import pytest
 from sklearn.linear_model import LinearRegression
 
 from unwrapped.popularity import (
+    DEFAULT_RF_PARAM_DISTRIBUTIONS,
     compare_models,
     cross_validate_model,
     evaluate_model,
@@ -18,6 +19,7 @@ from unwrapped.popularity import (
     split_data,
     train_linear_model,
     train_random_forest,
+    tune_random_forest,
     validate_data,
 )
 
@@ -364,6 +366,58 @@ def test_main_exits_cleanly_when_data_file_missing(
         main()
  
     assert exc_info.value.code == 1
+
+# Hyperparameter tuning should return a fitted RF and a cv_results DataFrame.
+def test_tune_random_forest_returns_expected_keys(sample_df):
+    big_df = pd.concat([sample_df] * 4, ignore_index=True)
+    big_df["track_id"] = [str(i) for i in range(len(big_df))]
+    processed = preprocess_data(big_df)
+    X_train, _, y_train, _ = split_data(processed, test_size=0.25)
+
+    result = tune_random_forest(X_train, y_train, n_iter=2, cv=2)
+
+    assert set(result.keys()) == {"best_estimator", "best_params", "best_score", "cv_results"}
+    assert hasattr(result["best_estimator"], "feature_importances_")
+    assert isinstance(result["best_params"], dict)
+    assert isinstance(result["best_score"], float)
+
+
+# cv_results should have one row per sampled candidate, sorted best-first.
+def test_tune_random_forest_cv_results_shape(sample_df):
+    big_df = pd.concat([sample_df] * 4, ignore_index=True)
+    big_df["track_id"] = [str(i) for i in range(len(big_df))]
+    processed = preprocess_data(big_df)
+    X_train, _, y_train, _ = split_data(processed, test_size=0.25)
+
+    result = tune_random_forest(X_train, y_train, n_iter=3, cv=2)
+    cv_results = result["cv_results"]
+
+    assert isinstance(cv_results, pd.DataFrame)
+    assert len(cv_results) == 3
+    assert {"params", "mean_test_score", "rank_test_score"} <= set(cv_results.columns)
+    assert cv_results.iloc[0]["rank_test_score"] == 1
+
+
+# Custom param distributions should be used instead of the defaults.
+def test_tune_random_forest_respects_custom_distributions(sample_df):
+    big_df = pd.concat([sample_df] * 4, ignore_index=True)
+    big_df["track_id"] = [str(i) for i in range(len(big_df))]
+    processed = preprocess_data(big_df)
+    X_train, _, y_train, _ = split_data(processed, test_size=0.25)
+
+    custom = {"n_estimators": [10], "max_depth": [3]}
+    result = tune_random_forest(X_train, y_train, param_distributions=custom, n_iter=1, cv=2)
+
+    assert result["best_params"]["n_estimators"] == 10
+    assert result["best_params"]["max_depth"] == 3
+
+
+# Default distributions should expose the documented hyperparameters.
+def test_default_rf_param_distributions_contains_expected_keys():
+    assert {"n_estimators", "max_depth", "min_samples_split", "max_features"} <= set(
+        DEFAULT_RF_PARAM_DISTRIBUTIONS.keys()
+    )
+
 
 # Passing save_results=False should skip writing files.
 def test_run_popularity_pipeline_skips_saving_when_disabled(

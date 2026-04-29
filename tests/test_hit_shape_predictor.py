@@ -1,7 +1,9 @@
+import numpy as np
 import pandas as pd
 import pytest
 
 from unwrapped.hit_shape_predictor import (
+    DEFAULT_RF_CLF_PARAM_DISTRIBUTIONS,
     validate_data,
     handle_missing_values,
     preprocess_data,
@@ -13,6 +15,10 @@ from unwrapped.hit_shape_predictor import (
     split_data,
     train_logistic_model,
     train_random_forest,
+    tune_random_forest_classifier,
+    compute_threshold_curve,
+    find_optimal_threshold,
+    predict_with_threshold,
     evaluate_model,
     compare_models,
     build_predictions_df,
@@ -251,6 +257,127 @@ def test_compare_models_sorts_highest_f1_first():
     comparison = compare_models(results)
 
     assert comparison.iloc[0]["model"] == "B"
+
+
+def _make_trained_classifier(test_size=0.5):
+    """Train a simple RF on the synthetic dataset for threshold tests."""
+    df = prepare_df()
+    similarity_df = compute_similarity_features(df)
+    model_df = build_modeling_dataframe(similarity_df)
+    X_train, X_test, y_train, y_test = split_data(
+        model_df, test_size=test_size, random_state=42
+    )
+    model = train_random_forest(X_train, y_train)
+    return model, X_test, y_test
+
+
+def test_tune_random_forest_classifier_returns_expected_keys():
+    df = prepare_df()
+    similarity_df = compute_similarity_features(df)
+    model_df = build_modeling_dataframe(similarity_df)
+    X_train, _, y_train, _ = split_data(
+        model_df, test_size=0.25, random_state=42
+    )
+
+    result = tune_random_forest_classifier(X_train, y_train, n_iter=2, cv=2)
+
+    assert set(result.keys()) == {"best_estimator", "best_params", "best_score", "cv_results"}
+    assert hasattr(result["best_estimator"], "feature_importances_")
+    assert hasattr(result["best_estimator"], "predict_proba")
+
+
+def test_tune_random_forest_classifier_cv_results_ranked():
+    df = prepare_df()
+    similarity_df = compute_similarity_features(df)
+    model_df = build_modeling_dataframe(similarity_df)
+    X_train, _, y_train, _ = split_data(
+        model_df, test_size=0.25, random_state=42
+    )
+
+    result = tune_random_forest_classifier(X_train, y_train, n_iter=3, cv=2)
+    cv_results = result["cv_results"]
+
+    assert isinstance(cv_results, pd.DataFrame)
+    assert len(cv_results) == 3
+    assert cv_results.iloc[0]["rank_test_score"] == 1
+
+
+def test_default_rf_clf_param_distributions_contains_expected_keys():
+    assert {"n_estimators", "max_depth", "min_samples_split", "max_features"} <= set(
+        DEFAULT_RF_CLF_PARAM_DISTRIBUTIONS.keys()
+    )
+
+
+def test_compute_threshold_curve_columns_and_ordering():
+    model, X_test, y_test = _make_trained_classifier()
+
+    curve = compute_threshold_curve(model, X_test, y_test)
+
+    assert {"threshold", "accuracy", "precision", "recall", "f1"} <= set(curve.columns)
+    assert curve["threshold"].is_monotonic_increasing
+    assert (curve[["accuracy", "precision", "recall", "f1"]] >= 0).all().all()
+    assert (curve[["accuracy", "precision", "recall", "f1"]] <= 1).all().all()
+
+
+def test_compute_threshold_curve_respects_custom_thresholds():
+    model, X_test, y_test = _make_trained_classifier()
+    custom = [0.1, 0.5, 0.9]
+
+    curve = compute_threshold_curve(model, X_test, y_test, thresholds=custom)
+
+    assert list(curve["threshold"]) == custom
+
+
+def test_find_optimal_threshold_returns_threshold_in_range():
+    model, X_test, y_test = _make_trained_classifier()
+
+    result = find_optimal_threshold(model, X_test, y_test, metric="f1")
+
+    assert {"best_threshold", "best_score", "metric", "curve"} <= set(result.keys())
+    assert 0.0 <= result["best_threshold"] <= 1.0
+    assert result["metric"] == "f1"
+    assert result["best_score"] >= result["curve"]["f1"].min()
+
+
+def test_find_optimal_threshold_beats_or_matches_default():
+    model, X_test, y_test = _make_trained_classifier()
+
+    result = find_optimal_threshold(model, X_test, y_test, metric="f1")
+
+    default_preds = (model.predict_proba(X_test)[:, 1] >= 0.5).astype(int)
+    from sklearn.metrics import f1_score as _f1
+
+    default_f1 = _f1(y_test, default_preds, zero_division=0)
+    assert result["best_score"] >= default_f1 - 1e-9
+
+
+def test_find_optimal_threshold_rejects_unknown_metric():
+    model, X_test, y_test = _make_trained_classifier()
+
+    with pytest.raises(ValueError, match="Unknown metric"):
+        find_optimal_threshold(model, X_test, y_test, metric="auroc")
+
+
+def test_predict_with_threshold_extreme_values():
+    model, X_test, _ = _make_trained_classifier()
+
+    all_zero = predict_with_threshold(model, X_test, threshold=1.01)
+    all_one = predict_with_threshold(model, X_test, threshold=0.0)
+
+    assert isinstance(all_zero, np.ndarray)
+    assert all_zero.dtype.kind == "i"
+    assert len(all_zero) == len(X_test)
+    assert all_zero.sum() == 0
+    assert all_one.sum() == len(X_test)
+
+
+def test_predict_with_threshold_requires_predict_proba():
+    class NoProba:
+        def predict(self, X):
+            return [0] * len(X)
+
+    with pytest.raises(TypeError, match="predict_proba"):
+        predict_with_threshold(NoProba(), pd.DataFrame({"a": [1, 2]}), threshold=0.5)
 
 
 def test_build_predictions_df_has_expected_columns():
