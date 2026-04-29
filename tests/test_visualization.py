@@ -250,3 +250,126 @@ def test_save_figure_writes_file_and_creates_parent_dirs(tmp_path: Path):
 
     assert output_path.exists()
     assert output_path.stat().st_size > 0
+
+from unwrapped.visualization import plot_feature_scatter, plot_tempo_by_genre, plot_preference_scores
+
+def test_plot_feature_scatter_returns_figure_and_axes():
+    fig, ax = plot_feature_scatter(_sample_df(), x_feature="energy", y_feature="danceability")
+    assert fig is not None
+    assert ax is not None
+ 
+ 
+def test_plot_feature_scatter_axis_labels_match_features():
+    _, ax = plot_feature_scatter(_sample_df(), x_feature="energy", y_feature="valence")
+    assert ax.get_xlabel() == "Energy"
+    assert ax.get_ylabel() == "Valence"
+ 
+ 
+def test_plot_feature_scatter_raises_on_missing_x_feature():
+    df = _sample_df().drop(columns=["energy"])
+    with pytest.raises(ValueError, match="energy"):
+        plot_feature_scatter(df, x_feature="energy", y_feature="danceability")
+ 
+ 
+def test_plot_feature_scatter_raises_on_missing_y_feature():
+    df = _sample_df().drop(columns=["danceability"])
+    with pytest.raises(ValueError, match="danceability"):
+        plot_feature_scatter(df, x_feature="energy", y_feature="danceability")
+ 
+ 
+def test_plot_feature_scatter_raises_on_missing_popularity():
+    df = _sample_df().drop(columns=["popularity"])
+    with pytest.raises(ValueError, match="popularity"):
+        plot_feature_scatter(df)
+ 
+ 
+def test_plot_feature_scatter_handles_large_df_with_sampling():
+    """When df exceeds the sample limit the function should still produce output."""
+    import numpy as np
+    rng = np.random.default_rng(0)
+    big_df = pd.DataFrame({
+        "energy":       rng.uniform(0, 1, 5000),
+        "danceability": rng.uniform(0, 1, 5000),
+        "popularity":   rng.integers(0, 100, 5000),
+    })
+    fig, ax = plot_feature_scatter(big_df, sample=100)
+    assert fig is not None
+
+def test_plot_tempo_by_genre_returns_figure_and_axes():
+    fig, ax = plot_tempo_by_genre(_sample_df(), top_n=3)
+    assert fig is not None
+    assert ax is not None
+ 
+ 
+def test_plot_tempo_by_genre_ylabel_contains_tempo():
+    _, ax = plot_tempo_by_genre(_sample_df(), top_n=2)
+    assert "Tempo" in ax.get_ylabel() or "BPM" in ax.get_ylabel()
+ 
+ 
+def test_plot_tempo_by_genre_xlabel_is_genre():
+    _, ax = plot_tempo_by_genre(_sample_df(), top_n=2)
+    assert "Genre" in ax.get_xlabel()
+ 
+ 
+def test_plot_tempo_by_genre_raises_on_missing_tempo():
+    df = _sample_df().drop(columns=["tempo"])
+    with pytest.raises(ValueError, match="tempo"):
+        plot_tempo_by_genre(df)
+ 
+ 
+def test_plot_tempo_by_genre_raises_on_missing_genre():
+    df = _sample_df().drop(columns=["track_genre"])
+    with pytest.raises(ValueError, match="track_genre"):
+        plot_tempo_by_genre(df)
+ 
+ 
+def test_plot_tempo_by_genre_respects_top_n():
+    """Number of box plot groups should not exceed top_n."""
+    _, ax = plot_tempo_by_genre(_sample_df(), top_n=2)
+    # ax.get_xticklabels() returns one label per group
+    labels = [l.get_text() for l in ax.get_xticklabels() if l.get_text()]
+    assert len(labels) <= 2
+
+def _pref_df(n: int = 8) -> pd.DataFrame:
+    import numpy as np
+    rng = np.random.default_rng(42)
+    return pd.DataFrame({
+        "track_name":       [f"Track {i}" for i in range(n)],
+        "artists":          [f"Artist {i % 3}" for i in range(n)],
+        "preference_score": rng.uniform(0.1, 1.0, n),
+    })
+ 
+ 
+def test_plot_preference_scores_returns_figure_and_axes():
+    fig, ax = plot_preference_scores(_pref_df(), top_n=5)
+    assert fig is not None
+    assert ax is not None
+ 
+ 
+def test_plot_preference_scores_xlabel_contains_score():
+    _, ax = plot_preference_scores(_pref_df(), top_n=5)
+    assert "Score" in ax.get_xlabel() or "Preference" in ax.get_xlabel()
+ 
+ 
+def test_plot_preference_scores_raises_on_missing_track_name():
+    df = _pref_df().drop(columns=["track_name"])
+    with pytest.raises(ValueError, match="track_name"):
+        plot_preference_scores(df)
+ 
+ 
+def test_plot_preference_scores_raises_on_missing_artists():
+    df = _pref_df().drop(columns=["artists"])
+    with pytest.raises(ValueError, match="artists"):
+        plot_preference_scores(df)
+ 
+ 
+def test_plot_preference_scores_raises_on_missing_preference_score():
+    df = _pref_df().drop(columns=["preference_score"])
+    with pytest.raises(ValueError, match="preference_score"):
+        plot_preference_scores(df)
+ 
+ 
+def test_plot_preference_scores_top_n_limits_bars():
+    """Chart should show at most top_n bars."""
+    _, ax = plot_preference_scores(_pref_df(n=8), top_n=4)
+    assert len(ax.patches) <= 4
