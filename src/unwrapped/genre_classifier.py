@@ -95,6 +95,55 @@ def prepare_genre_data(
     return X, y
 
 
+def prepare_genre_train_test_data(
+    df: pd.DataFrame,
+    min_samples_per_genre: int = 50,
+    test_size: float = 0.2,
+    random_state: int = 42,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """Prepare train/test genre data without test-set imputation leakage."""
+    df = df.copy()
+    df = df.dropna(subset=["track_genre"])
+
+    counts = df["track_genre"].value_counts()
+    keep = counts[counts >= min_samples_per_genre].index
+    df = df[df["track_genre"].isin(keep)].reset_index(drop=True)
+
+    if df.empty:
+        raise ValueError(
+            f"No genres have at least {min_samples_per_genre} samples."
+        )
+
+    train_df, test_df = train_test_split(
+        df,
+        test_size=test_size,
+        random_state=random_state,
+        stratify=df["track_genre"],
+    )
+
+    feature_cols = [c for c in AUDIO_FEATURES_FOR_HIT_CLASSIFICATION if c in df.columns]
+    X_train = train_df[feature_cols].copy()
+    X_test = test_df[feature_cols].copy()
+
+    if "explicit" in feature_cols:
+        X_train["explicit"] = X_train["explicit"].fillna(False).astype(int)
+        X_test["explicit"] = X_test["explicit"].fillna(False).astype(int)
+
+    for col in feature_cols:
+        if col == "explicit":
+            continue
+        X_train[col] = pd.to_numeric(X_train[col], errors="coerce")
+        X_test[col] = pd.to_numeric(X_test[col], errors="coerce")
+        train_median = X_train[col].median()
+        X_train[col] = X_train[col].fillna(train_median)
+        X_test[col] = X_test[col].fillna(train_median)
+
+    y_train = train_df["track_genre"].astype(str)
+    y_test = test_df["track_genre"].astype(str)
+
+    return X_train.astype(float), X_test.astype(float), y_train, y_test
+
+
 def split_genre_data(
     X: pd.DataFrame,
     y: pd.Series,
@@ -240,8 +289,10 @@ def run_genre_classifier_pipeline(
     df = load_data(data_path)
     validate_data(df)
 
-    X, y = prepare_genre_data(df, min_samples_per_genre=min_samples_per_genre)
-    X_train, X_test, y_train, y_test = split_genre_data(X, y)
+    X_train, X_test, y_train, y_test = prepare_genre_train_test_data(
+        df,
+        min_samples_per_genre=min_samples_per_genre,
+    )
 
     logistic_model = train_logistic_genre_classifier(X_train, y_train)
     logistic_results = evaluate_genre_model(
