@@ -175,6 +175,29 @@ def test_compute_similarity_features_adds_engineered_columns():
     assert "hit_closeness_ratio" in similarity_df.columns
 
 
+def test_compute_similarity_features_can_use_training_profiles():
+    df = prepare_df()
+    train_df = df.iloc[:4]
+    held_out_df = df.iloc[[4]]
+    profiles = build_hit_profiles(train_df)
+
+    similarity_df = compute_similarity_features(held_out_df, profiles=profiles)
+
+    features = profiles.columns.tolist()
+    held_out_vector = held_out_df[features].to_numpy()[0]
+    expected_hit_distance = np.linalg.norm(held_out_vector - profiles.loc[1].to_numpy())
+    expected_non_hit_distance = np.linalg.norm(
+        held_out_vector - profiles.loc[0].to_numpy()
+    )
+
+    assert similarity_df["distance_to_hit"].iloc[0] == pytest.approx(
+        expected_hit_distance
+    )
+    assert similarity_df["distance_to_non_hit"].iloc[0] == pytest.approx(
+        expected_non_hit_distance
+    )
+
+
 def test_build_modeling_dataframe_has_expected_columns_only():
     df = prepare_df()
     similarity_df = compute_similarity_features(df)
