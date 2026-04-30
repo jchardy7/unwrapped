@@ -187,23 +187,40 @@ def calculate_profile_differences(profiles):
     return difference_df
 
 
-def compute_centroids(df):
-    """Return the non-hit centroid and hit centroid as numpy arrays."""
-    profiles = build_hit_profiles(df)
+def compute_centroids(df, profiles=None):
+    """Return the non-hit centroid and hit centroid as numpy arrays.
+
+    ``profiles`` can be supplied when transforming held-out data so the
+    centroids come from the training split instead of being recomputed from
+    the rows being evaluated.
+    """
+    if profiles is None:
+        profiles = build_hit_profiles(df)
+    elif 0 not in profiles.index or 1 not in profiles.index:
+        raise ValueError("Profiles must contain both non-hit (0) and hit (1).")
+
     non_hit_centroid = profiles.loc[0].to_numpy()
     hit_centroid = profiles.loc[1].to_numpy()
     return non_hit_centroid, hit_centroid
 
 
-def compute_similarity_features(df):
+def compute_similarity_features(df, profiles=None):
     """
     Compute engineered similarity features based on distance to
     hit and non-hit audio profiles.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Labeled track data containing the audio feature columns.
+    profiles : pandas.DataFrame, optional
+        Precomputed hit/non-hit profiles. Pass profiles built from the
+        training split when transforming validation or test data.
     """
     df = df.copy()
     feature_cols = get_audio_feature_columns()
 
-    non_hit_centroid, hit_centroid = compute_centroids(df)
+    non_hit_centroid, hit_centroid = compute_centroids(df, profiles=profiles)
     X = df[feature_cols].to_numpy()
 
     distance_to_non_hit = np.linalg.norm(X - non_hit_centroid, axis=1)
@@ -516,13 +533,26 @@ def run_hit_shape_pipeline(
     df = preprocess_data(df)
     df = create_hit_label(df, threshold=hit_threshold)
 
-    profiles_df = build_hit_profiles(df)
+    train_df, test_df = train_test_split(
+        df,
+        test_size=0.2,
+        random_state=42,
+        stratify=df["is_hit"],
+    )
+
+    profiles_df = build_hit_profiles(train_df)
     differences_df = calculate_profile_differences(profiles_df)
 
-    similarity_df = compute_similarity_features(df)
-    model_df = build_modeling_dataframe(similarity_df)
+    train_similarity_df = compute_similarity_features(train_df, profiles=profiles_df)
+    test_similarity_df = compute_similarity_features(test_df, profiles=profiles_df)
 
-    X_train, X_test, y_train, y_test = split_data(model_df)
+    train_model_df = build_modeling_dataframe(train_similarity_df)
+    test_model_df = build_modeling_dataframe(test_similarity_df)
+
+    X_train = train_model_df.drop(columns=["is_hit"])
+    y_train = train_model_df["is_hit"]
+    X_test = test_model_df.drop(columns=["is_hit"])
+    y_test = test_model_df["is_hit"]
 
     logistic_model = train_logistic_model(X_train, y_train)
     logistic_results = evaluate_model(
