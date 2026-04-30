@@ -408,6 +408,25 @@ class TestPopularityByFeatureBuckets:
         assert (valid_buckets["avg_popularity"] >= 0).all()
         assert (valid_buckets["avg_popularity"] <= 100).all()
 
+    def test_empty_after_dropna_returns_empty_table(self) -> None:
+        df = make_df()
+        df["danceability"] = np.nan
+
+        result = popularity_by_feature_buckets(df, "danceability", 3)
+
+        assert result.empty
+        assert list(result.columns) == ["avg_popularity", "track_count"]
+
+    def test_constant_feature_returns_single_bucket(self) -> None:
+        df = make_df()
+        df["danceability"] = 0.5
+
+        result = popularity_by_feature_buckets(df, "danceability", 3)
+
+        assert len(result) == 1
+        assert result["track_count"].iloc[0] == len(df)
+        assert result["avg_popularity"].iloc[0] == round(df["popularity"].mean(), 2)
+
 
 # ------------------------------------------------------------------
 # run_analysis

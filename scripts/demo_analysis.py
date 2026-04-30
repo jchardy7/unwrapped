@@ -5,9 +5,14 @@ questions using the analysis module.  Results are printed to the terminal
 in a readable format with key takeaways highlighted.
 """
 
+import sys
+
 from unwrapped.io import DEFAULT_DATA_PATH, load_data
 from unwrapped.clean import clean_data
 from unwrapped.analysis import run_analysis
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(errors="replace")
 
 
 def print_header(title):
@@ -59,7 +64,7 @@ def main():
     display["p (Holm)"] = display["p_value_adjusted"].map(
         lambda p: "<1e-4" if p < 1e-4 else f"{p:.4f}"
     )
-    display["sig"] = display["significant"].map(lambda s: "✓" if s else "·")
+    display["sig"] = display["significant"].map(lambda s: "yes" if s else "no")
     print(
         display[
             ["feature", "correlation", "95% CI", "p (Holm)", "sig", "strength"]
