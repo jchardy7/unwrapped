@@ -71,7 +71,7 @@ To see test coverage:
 python -m pytest --cov=src/unwrapped --cov-report=term-missing
 ```
 
-**Current test coverage: 94%** across 319 tests. Per-module coverage:
+**Current test coverage: 94%** across 322 tests. Per-module coverage:
 
 | Module | Coverage |
 |---|---|

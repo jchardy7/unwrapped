@@ -37,8 +37,6 @@ from catboost import CatBoostRegressor
 # --------------------------
 
 DATA_PATHS = [
-    Path("/Users/norahmasrour/PyCharmMiscProject/spotify_final.csv"),
-    Path("/Users/norahmasrour/PyCharmMiscProject/spotify_data.csv"),
     Path("data/raw/spotify_final.csv"),
     Path("data/raw/spotify_data.csv"),
     Path("spotify_final.csv"),

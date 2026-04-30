@@ -423,10 +423,26 @@ def popularity_by_feature_buckets(
         raise ValueError(f"n_buckets must be >= 1, got {n_buckets}")
 
     tmp = df[[feature, "popularity"]].dropna().copy()
+    if tmp.empty:
+        return pd.DataFrame(columns=["avg_popularity", "track_count"])
+
     values = tmp[feature].values.astype(float)
+    value_min = float(np.min(values))
+    value_max = float(np.max(values))
+
+    if value_min == value_max:
+        label = f"{value_min:.2f}-{value_max:.2f}"
+        bucket_stats = pd.DataFrame(
+            {
+                "avg_popularity": [round(float(tmp["popularity"].mean()), 2)],
+                "track_count": [int(tmp["popularity"].count())],
+            },
+            index=pd.CategoricalIndex([label], categories=[label], name="bucket"),
+        )
+        return bucket_stats
 
     # Create evenly spaced bucket edges with numpy
-    edges = np.linspace(np.min(values), np.max(values), n_buckets + 1)
+    edges = np.linspace(value_min, value_max, n_buckets + 1)
     labels = [f"{edges[i]:.2f}-{edges[i + 1]:.2f}" for i in range(n_buckets)]
 
     tmp["bucket"] = pd.cut(
