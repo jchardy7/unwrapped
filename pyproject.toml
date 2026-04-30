@@ -9,11 +9,13 @@ description = "Python package using Spotify data for STAT 3250 final project"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-  "numpy>=2.0",
+  "numpy<2.0",
   "pandas>=2.2",
   "matplotlib>=3.8",
   "scikit-learn>=1.4",
   "scipy>=1.11",
+  "catboost>=1.2",
+  "joblib>=1.4",
 ]
 
 [project.optional-dependencies]

@@ -416,7 +416,7 @@ def cross_validate_model(model, X_train, y_train, cv=5):
         y_train,
         cv=cv,
         scoring="accuracy",
-        n_jobs=-1
+        n_jobs=1
     )
 
     f1_scores = cross_val_score(
@@ -425,7 +425,7 @@ def cross_validate_model(model, X_train, y_train, cv=5):
         y_train,
         cv=cv,
         scoring="f1",
-        n_jobs=-1
+        n_jobs=1
     )
 
     return {
