@@ -12,6 +12,7 @@ from unwrapped.genre_classifier import (
     confusion_matrix_df,
     evaluate_genre_model,
     prepare_genre_data,
+    prepare_genre_train_test_data,
     run_genre_classifier_pipeline,
     save_outputs,
     split_genre_data,
@@ -135,6 +136,36 @@ def test_prepare_genre_data_returns_audio_feature_columns():
     }
     assert expected <= set(X.columns)
     assert "track_genre" not in X.columns
+
+
+def test_prepare_genre_train_test_data_uses_training_medians(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    df = pd.DataFrame(
+        [
+            make_row(track_id="pop-train-missing", track_genre="pop", danceability=None),
+            make_row(track_id="pop-train", track_genre="pop", danceability=0.2),
+            make_row(track_id="rock-train", track_genre="rock", danceability=0.4),
+            make_row(track_id="pop-test-missing", track_genre="pop", danceability=None),
+            make_row(track_id="rock-test", track_genre="rock", danceability=0.95),
+        ]
+    )
+
+    def fake_split(frame, *args, **kwargs):
+        train_ids = {"pop-train-missing", "pop-train", "rock-train"}
+        train = frame[frame["track_id"].isin(train_ids)]
+        test = frame[~frame["track_id"].isin(train_ids)]
+        return train, test
+
+    monkeypatch.setattr("unwrapped.genre_classifier.train_test_split", fake_split)
+
+    X_train, X_test, _, _ = prepare_genre_train_test_data(
+        df,
+        min_samples_per_genre=1,
+    )
+
+    assert X_train.loc[0, "danceability"] == pytest.approx(0.3)
+    assert X_test.loc[3, "danceability"] == pytest.approx(0.3)
 
 
 def test_split_genre_data_preserves_class_set():
