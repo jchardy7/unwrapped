@@ -11,7 +11,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
+
 from unwrapped.preference import AUDIO_FEATURES, LikedSongs
+
 
 
 def make_row(**overrides: Any) -> dict[str, Any]:
@@ -34,6 +36,7 @@ def make_row(**overrides: Any) -> dict[str, Any]:
     }
     row.update(overrides)
     return row
+
 
 
 def make_df() -> pd.DataFrame:
