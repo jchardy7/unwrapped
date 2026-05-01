@@ -11,6 +11,7 @@ def main() -> None:
 
     cleaned_df, report = run_cleaning(DEFAULT_DATA_PATH)
 
+    
     print("Cleaning report:")
     pprint(report)
 
@@ -18,5 +19,8 @@ def main() -> None:
     print(cleaned_df.head())
 
 
+
 if __name__ == "__main__":
     main()
+
+
