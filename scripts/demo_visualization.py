@@ -1,5 +1,6 @@
 from pathlib import Path
 
+
 from unwrapped.clean import clean_data
 from unwrapped.io import load_data
 from unwrapped.visualization import (
@@ -14,10 +15,13 @@ from unwrapped.visualization import (
 )
 
 
+
+
 def main() -> None:
     data_path = "data/raw/spotify_data.csv"
     output_dir = Path("outputs")
 
+    
     print("Loading and cleaning data...")
     raw_df = load_data(data_path)
     df, _ = clean_data(raw_df)
@@ -50,6 +54,8 @@ def main() -> None:
     fig6, _ = plot_hit_vs_nonhit_profiles(df, threshold=70)
     save_figure(fig6, output_dir / "hit_vs_nonhit_profiles.png")
     print("Saved outputs/hit_vs_nonhit_profiles.png")
+
+
 
 
 if __name__ == "__main__":
