@@ -7,9 +7,11 @@ the dataset by audio-feature similarity to a user-defined liked-songs list.
 The demo dynamically picks 5 of the most-popular tracks as a seed list so it
 works on any version of the dataset without hardcoding IDs.
 
+
 Run from the project root:
     python scripts/demo_preference.py
 """
+
 
 from unwrapped.clean import clean_data
 from unwrapped.io import load_data
@@ -39,6 +41,7 @@ def main() -> None:
         .head(N_SEED_SONGS)
     )
 
+    
     liked = LikedSongs(df)
     print(f"\nAdding {N_SEED_SONGS} seed tracks (top by popularity):")
     for _, row in top_tracks.iterrows():
@@ -79,6 +82,7 @@ def main() -> None:
                 print(f"    {item['feature']:<22}  profile={item['profile_raw']:.3f}  track={item['track_raw']:.3f}")
     except Exception:
         print("  (explanation not available for this track)")
+
 
 
 if __name__ == "__main__":
