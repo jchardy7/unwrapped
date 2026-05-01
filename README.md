@@ -10,7 +10,7 @@ model track popularity, and recommend songs based on listening preferences.
 
 1. **Which audio features are most associated with track popularity?**
    We computed Pearson correlations between each audio feature and popularity,
-   then used bucket analysis to check for non-linear patterns.
+   then used bucket analysis to check for non-linear patterns
 
 2. **How do genres differ in their audio profiles?**
    We compared the top genres by their average audio features to see what makes
@@ -222,7 +222,7 @@ CatBoost performed best, but only marginally outperformed linear regression.
 
 ### Interpretation
 
-The similar performance between CatBoost and Linear Regression suggests that the relationship between audio features and popularity is largely linear. The relatively low R² (~0.5) indicates that a significant portion of popularity cannot be explained by audio features alone.
+The similar performance between CatBoost and Linear Regression implies that the relationship between audio features and popularity is largely linear. The relatively low R² (~0.5) indicates that a significant portion of popularity cannot be explained by audio features alone.
 
 This highlights an important limitation of the dataset: external factors such as marketing, artist popularity, playlist placement, and social trends likely play a major role in determining song popularity.
 
@@ -262,7 +262,7 @@ python -m unwrapped.popularity data/raw/spotify_data.csv
 
 ## Hit Shape Predictor (`hit_shape_predictor.py`)
 
-The Hit Shape Predictor identifies whether a song resembles the audio profile of a hit song. It defines hit songs using a popularity threshold, builds average audio-feature profiles for hit and non-hit tracks, computes distance-based similarity features using NumPy, trains Logistic Regression and Random Forest classifiers, and evaluates models using accuracy, precision, recall, and F1.
+The Hit Shape Predictor identifies whether a song resembles the audio profile of a hit song. That defines hit songs using a popularity threshold, builds average audio-feature profiles for hit and non-hit tracks, computes distance-based similarity features using NumPy, trains Logistic Regression and Random Forest classifiers, and evaluates models using accuracy, precision, recall, and F1.
 
 This module helps answer: “What does the shape of a hit song look like compared to a non-hit song?”
 
@@ -286,7 +286,7 @@ Groups tracks by audio profile using KMeans clustering. Includes utilities to se
 
 A recommendation tool. You add songs you like, and it builds a "taste
 profile" (mean audio feature vector of your liked songs), then scores every
-other track by cosine similarity to your profile. Scores range from 0 to 1.
+other track by cosine similarity to your profile. Scores range from 0 to 1
 
 ```python
 from unwrapped.io import load_data
