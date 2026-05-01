@@ -3,9 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+
 import numpy as np
 import pandas as pd
 import pytest
+
 
 from unwrapped.genre_classifier import (
     compare_genre_models,
