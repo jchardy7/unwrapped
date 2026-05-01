@@ -7,7 +7,7 @@
 
 ## 1. Which audio features are most associated with popularity?
 
-All correlations between individual audio features and popularity are weak (|r| < 0.15), which is itself a meaningful finding: **no single audio feature is a reliable predictor of whether a track will be popular.**
+All correlations between individual audio features and popularity are weak (|r| < 0.15), which is itself a meaningful finding: **no single audio feature is a reliable predictor of whether a track will be popular**
 
 | Feature | Correlation with Popularity | Direction |
 |---|---|---|
@@ -69,7 +69,7 @@ All correlations between individual audio features and popularity are weak (|r| 
 
 - **The "chill" genre challenges the energy-popularity assumption.** Despite below-average energy (0.43), chill has the 4th-highest avg popularity (54.1). This suggests that genre-level audience size and platform curation matter more than raw audio energy.
 
-- **EDM genres split dramatically.** Progressive house (avg 48.3) significantly outperforms detroit-techno (11.1) and chicago-house (12.3), despite similar audio signatures. The difference likely lies in mainstream crossover appeal — progressive house has had major pop crossovers; the classic house and techno genres remain more underground.
+- **EDM genres split dramatically.** Progressive house (avg 48.3) significantly outperforms detroit-techno (11.1) and chicago-house (12.3), despite similar audio signatures. The difference likely lies in mainstream crossover appeal — progressive house has had major pop crossovers; the classic house and techno genres remain more underground
 
 ---
 
@@ -92,7 +92,7 @@ The outlier detection computes z-scores for each track's audio features relative
 - Outliers are spread across genres rather than concentrated in one — no single genre is systematically "noisy."
 - Several outliers are intentional artistic departures (Opeth's acoustic track in death metal, j-hope's quiet outro), rather than mislabeled data.
 - The comedy genre appears twice, suggesting its audio profile is highly variable — comedy tracks range from lo-fi spoken word to full electronic production.
-- Deviation scores drop off quickly after the top few outliers: 16 of the 20 tracks cluster between 2.8 and 3.5, indicating that extreme outliers are rare. The vast majority of tracks sit comfortably within their genre's audio norms.
+- Deviation scores drop off quickly after the top few outliers: there are 16 of the 20 tracks cluster between 2.8 and 3.5, indicating that extreme outliers are rare. The vast majority of tracks sit comfortably within their genre's audio norms.
 
 ---
 
@@ -119,7 +119,7 @@ The dataset is in good shape, with a few caveats:
 
 - **Missing values are minimal.** Only 3 columns have any nulls at all (artists, album_name, track_name — 1 row each, 0.001%). This is unusually clean for a real-world dataset.
 
-- **The cleaning pipeline removed 21% of rows (24,417).** The primary culprits are likely duplicate track IDs across genre assignments (the same track appears in multiple genre buckets in the raw export) and rows failing range validation. The deduplication step — keeping the most complete row per track_id — is the most impactful cleaning step.
+- **The cleaning pipeline removed 21% of rows (24,417).** The primary culprits are likely duplicate track IDs across genre assignments (the same track appears in multiple genre buckets in the raw export) and rows failing range validation. The deduplication step, keeping the most complete row per track_id, is the most impactful cleaning step.
 
 - **Popularity is well-distributed** (mean 33.2, median 35.0, roughly symmetric) with only 2 IQR outliers. This suggests the 0–100 scale is being used across its full range, though a small cluster of tracks with popularity = 0 may represent delisted or very obscure tracks rather than truly zero-popularity songs.
 
